@@ -17,6 +17,7 @@ def get_miou(cm):
 
 
 def mask_to_semantic(mask, labels):
+    # 标签图转语义图  labels代表所有的标签 [100, 200, 300, 400, 500, 600, 700, 800]
     semantic_map = []
     for label in labels:
         equality = np.equal(mask, label)
@@ -26,6 +27,7 @@ def mask_to_semantic(mask, labels):
 
 
 def semantic_to_mask(mask, labels):
+    # 语义图转标签图  labels代表所有的标签 [100, 200, 300, 400, 500, 600, 700, 800]
     x = np.argmax(mask, axis=1)
     label_codes = np.array(labels)
     x = np.uint16(label_codes[x.astype(np.uint8)])
