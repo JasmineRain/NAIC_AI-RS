@@ -21,7 +21,7 @@ class BaseRefineNet4Cascade(nn.Module):
             num_classes (int, optional): number of classes
             features (int, optional): number of features in refinenet
             resnet_factory (func, optional): A Resnet model from torchvision.
-                Default: models.resnet101
+                Default: HRNet+OCR.resnet101
             pretrained (bool, optional): Use pretrained version of resnet
                 Default: True
             freeze_resnet (bool, optional): Freeze resnet model
@@ -127,7 +127,7 @@ class RefineNet4CascadePoolingImproved(BaseRefineNet4Cascade):
             num_classes (int, optional): number of classes
             features (int, optional): number of features in refinenet
             resnet_factory (func, optional): A Resnet model from torchvision.
-                Default: models.resnet101
+                Default: HRNet+OCR.resnet101
             pretrained (bool, optional): Use pretrained version of resnet
                 Default: True
             freeze_resnet (bool, optional): Freeze resnet model
@@ -165,7 +165,7 @@ class RefineNet4Cascade(BaseRefineNet4Cascade):
             num_classes (int, optional): number of classes
             features (int, optional): number of features in refinenet
             resnet_factory (func, optional): A Resnet model from torchvision.
-                Default: models.resnet101
+                Default: HRNet+OCR.resnet101
             pretrained (bool, optional): Use pretrained version of resnet
                 Default: True
             freeze_resnet (bool, optional): Freeze resnet model

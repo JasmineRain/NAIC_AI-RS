@@ -85,7 +85,7 @@ class BaseNet(nn.Module):
     def __init__(self, nclass, backbone, dilated=True, norm_layer=None):
         super(BaseNet, self).__init__()
         self.nclass = nclass
-        # copying modules from pretrained models
+        # copying modules from pretrained HRNet+OCR
         if backbone == 'resnet50':
             self.pretrained = resnet.resnet50(pretrained=False, dilated=dilated, norm_layer=norm_layer)
         elif backbone == 'resnet101':

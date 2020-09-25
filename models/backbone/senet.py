@@ -215,43 +215,43 @@ class SENet(nn.Module):
         ----------
         block (nn.Module): Bottleneck class.
             - For SENet154: SEBottleneck
-            - For SE-ResNet models: SEResNetBottleneck
-            - For SE-ResNeXt models:  SEResNeXtBottleneck
+            - For SE-ResNet HRNet+OCR: SEResNetBottleneck
+            - For SE-ResNeXt HRNet+OCR:  SEResNeXtBottleneck
         layers (list of ints): Number of residual blocks for 4 layers of the
             network (layer1...layer4).
         groups (int): Number of groups for the 3x3 convolution in each
             bottleneck block.
             - For SENet154: 64
-            - For SE-ResNet models: 1
-            - For SE-ResNeXt models:  32
+            - For SE-ResNet HRNet+OCR: 1
+            - For SE-ResNeXt HRNet+OCR:  32
         reduction (int): Reduction ratio for Squeeze-and-Excitation modules.
-            - For all models: 16
+            - For all HRNet+OCR: 16
         dropout_p (float or None): Drop probability for the Dropout layer.
             If `None` the Dropout layer is not used.
             - For SENet154: 0.2
-            - For SE-ResNet models: None
-            - For SE-ResNeXt models: None
+            - For SE-ResNet HRNet+OCR: None
+            - For SE-ResNeXt HRNet+OCR: None
         inplanes (int):  Number of input channels for layer1.
             - For SENet154: 128
-            - For SE-ResNet models: 64
-            - For SE-ResNeXt models: 64
+            - For SE-ResNet HRNet+OCR: 64
+            - For SE-ResNeXt HRNet+OCR: 64
         input_3x3 (bool): If `True`, use three 3x3 convolutions instead of
             a single 7x7 convolution in layer0.
             - For SENet154: True
-            - For SE-ResNet models: False
-            - For SE-ResNeXt models: False
+            - For SE-ResNet HRNet+OCR: False
+            - For SE-ResNeXt HRNet+OCR: False
         downsample_kernel_size (int): Kernel size for downsampling convolutions
             in layer2, layer3 and layer4.
             - For SENet154: 3
-            - For SE-ResNet models: 1
-            - For SE-ResNeXt models: 1
+            - For SE-ResNet HRNet+OCR: 1
+            - For SE-ResNeXt HRNet+OCR: 1
         downsample_padding (int): Padding for downsampling convolutions in
             layer2, layer3 and layer4.
             - For SENet154: 1
-            - For SE-ResNet models: 0
-            - For SE-ResNeXt models: 0
+            - For SE-ResNet HRNet+OCR: 0
+            - For SE-ResNeXt HRNet+OCR: 0
         num_classes (int): Number of outputs in `last_linear` layer.
-            - For all models: 1000
+            - For all HRNet+OCR: 1000
         """
         super(SENet, self).__init__()
         self.inplanes = inplanes

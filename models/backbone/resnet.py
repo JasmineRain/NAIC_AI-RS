@@ -228,7 +228,7 @@ def resnet152(pretrained=False, output_stride=None, **kwargs):
     """
     model = ResNet(Bottleneck, [3, 8, 36, 3], output_stride, **kwargs)
     if pretrained:
-        model._load_pretrained_model(model_zoo.load_url(model_urls['resnet152']))
+        model._load_pretrained_model(torch.load("./resnet152-b121ed2d.pth"))
     return model
 
 
