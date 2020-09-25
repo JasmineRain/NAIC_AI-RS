@@ -36,7 +36,7 @@ config = {
   "MODEL": {
     "NAME": "seg_hrnet_ocr",
     "NUM_OUTPUTS": 2,
-    "PRETRAINED": "",
+    "PRETRAINED": "./hrnet_ocr_cs_trainval_8227_torch11.pth",
     "EXTRA": {
       "FINAL_CONV_KERNEL": 1,
       "STAGE1": {
@@ -742,14 +742,22 @@ class HighResolutionNet(nn.Module):
             logger.info('=> loading pretrained model {}'.format(pretrained))
             model_dict = self.state_dict()
             pretrained_dict = {k.replace('last_layer', 'aux_head').replace('model.', ''): v for k, v in pretrained_dict.items()}  
-            print(set(model_dict) - set(pretrained_dict))            
-            print(set(pretrained_dict) - set(model_dict))            
+            # print(set(model_dict) - set(pretrained_dict))
+            # print(set(pretrained_dict) - set(model_dict))
             pretrained_dict = {k: v for k, v in pretrained_dict.items()
                                if k in model_dict.keys()}
+
+            pretrained_dict.pop("cls_head.weight")
+            pretrained_dict.pop("cls_head.bias")
+            pretrained_dict.pop("aux_head.3.weight")
+            pretrained_dict.pop("aux_head.3.bias")
+            # print(pretrained_dict)
+
             # for k, _ in pretrained_dict.items():
                 # logger.info(
                 #     '=> loading {} pretrained model {}'.format(k, pretrained))
             model_dict.update(pretrained_dict)
+
             self.load_state_dict(model_dict)
         elif pretrained:
             raise RuntimeError('No such file {}'.format(pretrained))
@@ -757,13 +765,14 @@ class HighResolutionNet(nn.Module):
 
 def get_seg_model(cfg=config, **kwargs):
     model = HighResolutionNet(cfg, **kwargs)
-    # model.init_weights(cfg.MODEL.PRETRAINED)
+    model.init_weights(cfg['MODEL']['PRETRAINED'])
 
     return model
 
 
 if __name__ == "__main__":
     print(config['MODEL'])
+    print(torch.__version__)
     model = get_seg_model()
     model.eval()
     img = torch.rand(1, 3, 256, 256)

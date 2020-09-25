@@ -3,7 +3,7 @@ import numpy as np
 import os
 from util import semantic_to_mask, mask_to_semantic, get_confusion_matrix, get_miou
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 2, 5, 6'
 import torch
 import torch.nn as nn
 from torch.optim import SGD, lr_scheduler, adamw
@@ -13,7 +13,7 @@ from models import UNetPP, UNet, rf101, DANet, SEDANet
 from loss import lovasz_softmax, LabelSmoothSoftmaxCE
 from utils_Deeplab import SyncBN2d
 from models.DeepLabV3_plus import deeplabv3_plus
-
+from models.HRNetOCR import seg_hrnet_ocr
 from data_loader import get_dataloader
 
 
@@ -28,8 +28,8 @@ def train_val(config):
     writer = SummaryWriter(
         comment="LR_%f_BS_%d_MODEL_%s_DATA_%s" % (config.lr, config.batch_size, config.model_type, config.data_type))
 
-    if config.model_type not in ['UNet', 'UNet++', 'RefineNet', 'DANet', 'Deeplabv3+', 'SEDANet']:
-        print('ERROR!! model_type should be selected in supported models')
+    if config.model_type not in ['UNet', 'UNet++', 'RefineNet', 'DANet', 'Deeplabv3+', 'SEDANet', 'HRNet_OCR']:
+        print('ERROR!! model_type should be selected in supported HRNet+OCR')
         print('Choose model %s' % config.model_type)
         return
     if config.model_type == "UNet":
@@ -44,6 +44,8 @@ def train_val(config):
         model = DANet(backbone='resnext101', nclass=config.output_ch, pretrained=True, norm_layer=SyncBN2d)
     elif config.model_type == "Deeplabv3+":
         model = deeplabv3_plus.DeepLabv3_plus(in_channels=3, num_classes=8, backend='resnet101', os=16, pretrained=True, norm_layer=nn.BatchNorm2d)
+    elif config.model_type == "HRNet_OCR":
+        model = seg_hrnet_ocr.get_seg_model()
     else:
         model = UNet()
 
@@ -76,8 +78,8 @@ def train_val(config):
 
     criterion = nn.CrossEntropyLoss()
 
-    scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[25, 30, 35, 40], gamma=0.5)
-    # scheduler = lr_scheduler.CosineAnnealingLR(optimizer, 10, eta_min=1e-4)
+    # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[25, 30, 35, 40], gamma=0.5)
+    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=12, eta_min=1e-4)
 
     global_step = 0
     max_miou = 0
@@ -136,7 +138,13 @@ def train_val(config):
 
             miou = get_miou(cm)
             if miou.mean() > max_miou:
-                torch.save(model, config.result_path + "/%d_%s_%s.pth" % (epoch + 1, config.model_type, str(miou.mean())))
+                if torch.__version__ == "1.6.0":
+                    torch.save(model,
+                               config.result_path + "/%d_%s_%s.pth" % (epoch + 1, config.model_type, str(miou.mean())),
+                               _use_new_zipfile_serialization=False)
+                else:
+                    torch.save(model,
+                               config.result_path + "/%d_%s_%s.pth" % (epoch + 1, config.model_type, str(miou.mean())))
                 max_miou = miou.mean()
             print(miou)
             print("testing epoch loss: " + str(val_loss))
@@ -160,8 +168,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=1000)
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--model_type', type=str, default='DANet', help='UNet/UNet++/RefineNet')
+    parser.add_argument('--lr', type=float, default=1e-2)
+    parser.add_argument('--model_type', type=str, default='HRNet_OCR', help='UNet/UNet++/RefineNet')
     parser.add_argument('--data_type', type=str, default='multi', help='single/multi')
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
     parser.add_argument('--optimizer', type=str, default='sgd', help='sgd/adam/adamw')
