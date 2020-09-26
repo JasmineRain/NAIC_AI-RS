@@ -50,7 +50,7 @@ class RSDataset(Dataset):
             image = self.cl(image)
             image = self.ct(image)
             image = self.gb(image)
-            image, mask = self.tt(image, mask, labels=self.labels)
+            image, mask = self.tt(image, mask, labels=self.labels, smooth=False)
             image, mask = self.nl(image, mask)
 
         elif self.mode == 'val':

@@ -149,27 +149,22 @@ class GaussianBlur(object):
 
 class ToTensor(object):
 
-    def __call__(self, image, mask, labels=[100, 200, 300, 400, 500, 600, 700, 800], mode="train"):
+    def __call__(self, image, mask, labels=[100, 200, 300, 400, 500, 600, 700, 800], mode="train", smooth=False):
         # image transform
 
         image = np.array(image).astype(np.float)
         mask = np.array(mask)
 
         if mode == "test":
-            # for i in range(image.shape[2]):
-            #     image[:, :, i] = (image[:, :, i] - np.min(image[:, :, i])) / (
-            #                 np.max(image[:, :, i]) - np.min(image[:, :, i]))
             image /= 255
             image = torch.from_numpy(image.transpose((2, 0, 1)))
             return image
 
-        # for i in range(image.shape[2]):
-        #     image[:, :, i] = (image[:, :, i] - np.min(image[:, :, i])) / (np.max(image[:, :, i]) - np.min(image[:, :, i]))
         image /= 255
         image = torch.from_numpy(image.transpose((2, 0, 1)))
 
         # mask transform to semantic
-        mask = torch.from_numpy(mask_to_semantic(mask, labels).transpose((2, 0, 1)))
+        mask = torch.from_numpy(mask_to_semantic(mask, labels, smooth=smooth).transpose((2, 0, 1)))
         return image, mask
 
 
