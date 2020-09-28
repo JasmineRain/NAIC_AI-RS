@@ -1,21 +1,17 @@
-import numpy as np
-from PIL import Image
 import os
-import torchvision.transforms.functional as F
-from util import semantic_to_mask
 import torch
-import cv2
-from data_loader import get_dataloader
-from models import DANet
 
 def restore_models():
 
-    src = "./ensemble"
+    src = "./exp"
     names = os.listdir(src)
 
     for name in names:
-        model = torch.load(os.path.join(src, name)).module
-        torch.save(model, "./ensemble/new_%s" % name, _use_new_zipfile_serialization=False)
+        model = torch.load(os.path.join(src, name), map_location='cpu').module
+        if torch.__version__ == "1.6.0":
+            torch.save(model, "./ensemble/%s" % name, _use_new_zipfile_serialization=False)
+        else:
+            torch.save(model, "./ensemble/%s" % name)
         print(name + " has been restored")
 
 

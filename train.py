@@ -10,7 +10,7 @@ from torch.optim import SGD, lr_scheduler, adamw
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 from models import UNetPP, UNet, rf101, DANet, SEDANet
-from loss import lovasz_softmax, LabelSmoothSoftmaxCE
+from loss import lovasz_softmax, LabelSmoothSoftmaxCE, LabelSmoothCE
 from utils_Deeplab import SyncBN2d
 from models.DeepLabV3_plus import deeplabv3_plus
 from models.HRNetOCR import seg_hrnet_ocr
@@ -21,7 +21,7 @@ def train_val(config):
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
     train_loader = get_dataloader(img_dir=config.train_img_dir, mask_dir=config.train_mask_dir, mode="train",
-                                  batch_size=config.batch_size, num_workers=config.num_workers)
+                                  batch_size=config.batch_size, num_workers=config.num_workers, smooth=config.smooth)
     val_loader = get_dataloader(img_dir=config.val_img_dir, mask_dir=config.val_mask_dir, mode="val",
                                 batch_size=config.batch_size, num_workers=config.num_workers)
 
@@ -41,16 +41,16 @@ def train_val(config):
     elif config.model_type == "RefineNet":
         model = rf101()
     elif config.model_type == "DANet":
-        model = DANet(backbone='resnext101', nclass=config.output_ch, pretrained=True, norm_layer=SyncBN2d)
+        model = DANet(backbone='resnet101', nclass=config.output_ch, pretrained=True, norm_layer=SyncBN2d)
     elif config.model_type == "Deeplabv3+":
-        model = deeplabv3_plus.DeepLabv3_plus(in_channels=3, num_classes=8, backend='resnet101', os=16, pretrained=True, norm_layer=nn.BatchNorm2d)
+        model = deeplabv3_plus.DeepLabv3_plus(in_channels=3, num_classes=8, backend='resnet101', os=16, pretrained=True, norm_layer=SyncBN2d)
     elif config.model_type == "HRNet_OCR":
         model = seg_hrnet_ocr.get_seg_model()
     else:
         model = UNet()
 
     if config.iscontinue:
-        model = torch.load("./exp/21_Deeplabv3+.pth").module
+        model = torch.load("./exp/21_Deeplabv3+.pth")
 
     for k, m in model.named_modules():
         m._non_persistent_buffers_set = set()  # pytorch 1.6.0 compatability
@@ -74,12 +74,15 @@ def train_val(config):
     # weight = torch.tensor([1, 1.5, 1, 2, 1.5, 2, 2, 1.2]).to(device)
     # criterion = nn.CrossEntropyLoss(weight=weight)
 
-    # criterion = LabelSmoothSoftmaxCE()
-
-    criterion = nn.CrossEntropyLoss()
+    if config.smooth == "all":
+        criterion = LabelSmoothSoftmaxCE()
+    elif config.smooth == "edge":
+        criterion = LabelSmoothCE()
+    else:
+        criterion = nn.CrossEntropyLoss()
 
     # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[25, 30, 35, 40], gamma=0.5)
-    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=12, eta_min=1e-4)
+    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-5)
 
     global_step = 0
     max_miou = 0
@@ -91,7 +94,10 @@ def train_val(config):
             model.train()
             for image, mask in train_loader:
                 image = image.to(device, dtype=torch.float32)
-                mask = mask.to(device, dtype=torch.long).argmax(dim=1)
+                if config.smooth == "edge":
+                    mask = mask.to(device, dtype=torch.float32)
+                else:
+                    mask = mask.to(device, dtype=torch.long).argmax(dim=1)
 
                 pred = model(image)
                 loss = criterion(pred, mask)
@@ -139,11 +145,11 @@ def train_val(config):
             miou = get_miou(cm)
             if miou.mean() > max_miou:
                 if torch.__version__ == "1.6.0":
-                    torch.save(model,
+                    torch.save(model.module,
                                config.result_path + "/%d_%s_%s.pth" % (epoch + 1, config.model_type, str(miou.mean())),
                                _use_new_zipfile_serialization=False)
                 else:
-                    torch.save(model,
+                    torch.save(model.module,
                                config.result_path + "/%d_%s_%s.pth" % (epoch + 1, config.model_type, str(miou.mean())))
                 max_miou = miou.mean()
             print(miou)
@@ -169,14 +175,15 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--lr', type=float, default=1e-2)
-    parser.add_argument('--model_type', type=str, default='HRNet_OCR', help='UNet/UNet++/RefineNet')
+    parser.add_argument('--model_type', type=str, default='Deeplabv3+', help='UNet/UNet++/RefineNet')
     parser.add_argument('--data_type', type=str, default='multi', help='single/multi')
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
     parser.add_argument('--optimizer', type=str, default='sgd', help='sgd/adam/adamw')
-    parser.add_argument('--iscontinue', type=str, default=True, help='true/false')
+    parser.add_argument('--iscontinue', type=str, default=False, help='true/false')
+    parser.add_argument('--smooth', type=str, default="edge", help='true/false')
 
-    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train/image")
-    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train/mask")
+    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train_pseudo/image")
+    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train_pseudo/mask")
     parser.add_argument('--val_img_dir', type=str, default="../data/PCL/val/image")
     parser.add_argument('--val_mask_dir', type=str, default="../data/PCL/val/mask")
     parser.add_argument('--num_train', type=int, default=90000, help="4800/1600")

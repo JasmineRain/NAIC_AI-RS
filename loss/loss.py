@@ -3,8 +3,7 @@ import torch.nn.functional as F
 import torch
 import numpy as np
 
-
-__all__ = ["DiceLoss", "MixLoss", "FocalLoss", 'LabelSmoothSoftmaxCE']
+__all__ = ["DiceLoss", "MixLoss", "FocalLoss", 'LabelSmoothSoftmaxCE', 'LabelSmoothCE']
 
 
 class DiceLoss(nn.Module):
@@ -69,7 +68,7 @@ class FocalLoss(nn.Module):
         else:
             BCE_loss = F.binary_cross_entropy(inputs, targets, reduce=False)
         pt = torch.exp(-BCE_loss)
-        F_loss = self.alpha * (1 - pt)**self.gamma * BCE_loss
+        F_loss = self.alpha * (1 - pt) ** self.gamma * BCE_loss
 
         if self.reduce:
             return torch.mean(F_loss)
@@ -110,4 +109,17 @@ class LabelSmoothSoftmaxCE(nn.Module):
         if self.reduction == 'sum':
             loss = loss.sum()
 
+        return loss
+
+
+class LabelSmoothCE(nn.Module):
+
+    def __init__(self):
+        super(LabelSmoothCE, self).__init__()
+
+    def forward(self, pred, label):
+        pred = F.log_softmax(pred, dim=1)
+        # print(pred.shape, label.shape)
+        loss = -torch.sum(pred * label, dim=1)
+        loss = loss.sum() / (label.shape[2] * label.shape[3] * label.shape[0])
         return loss

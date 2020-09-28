@@ -10,10 +10,11 @@ from data_transform import HorizontalFlip, VerticalFlip, Rotate, ToTensor, Norma
 
 class RSDataset(Dataset):
 
-    def __init__(self, img_dir, mask_dir, mode='test'):
+    def __init__(self, img_dir, mask_dir, mode='test', smooth=False):
         self.img_dir = img_dir
         self.mask_dir = mask_dir
         self.mode = mode
+        self.smooth = smooth
         self.images = list(sorted(os.listdir(img_dir)))
         self.masks = list(sorted(os.listdir(mask_dir)))
         self.labels = [100, 200, 300, 400, 500, 600, 700, 800]
@@ -50,7 +51,7 @@ class RSDataset(Dataset):
             image = self.cl(image)
             image = self.ct(image)
             image = self.gb(image)
-            image, mask = self.tt(image, mask, labels=self.labels, smooth=False)
+            image, mask = self.tt(image, mask, labels=self.labels, smooth=self.smooth)
             image, mask = self.nl(image, mask)
 
         elif self.mode == 'val':
@@ -70,18 +71,18 @@ class RSDataset(Dataset):
         return image, mask
 
 
-def get_dataloader(img_dir, mask_dir, batch_size, num_workers, mode="train"):
+def get_dataloader(img_dir, mask_dir, batch_size, num_workers, mode="train", smooth=False):
 
     if mode == "train":
-        train_dataset = RSDataset(img_dir, mask_dir, mode="train")
+        train_dataset = RSDataset(img_dir, mask_dir, mode="train", smooth=smooth)
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
         return train_dataloader
     elif mode == "test":
-        test_dataset = RSDataset(img_dir, mask_dir, mode='test')
+        test_dataset = RSDataset(img_dir, mask_dir, mode='test', smooth=False)
         test_dataloader = DataLoader(test_dataset, batch_size=64, shuffle=False, num_workers=num_workers)
         return test_dataloader
     else:
-        val_dataset = RSDataset(img_dir, mask_dir, mode='val')
+        val_dataset = RSDataset(img_dir, mask_dir, mode='val', smooth=False)
         val_dataloader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=num_workers)
         return val_dataloader
 

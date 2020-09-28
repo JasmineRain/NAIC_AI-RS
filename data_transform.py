@@ -77,6 +77,61 @@ class Rotate(object):
         return image, mask
 
 
+class HorizontalFlipNP(object):
+
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, image, mask):
+
+        if random.random() < self.p:
+            image = image.transpose(Image.FLIP_LEFT_RIGHT)
+            for i in range(mask.shape[0]):
+                mask[i, :, :] = np.array(Image.fromarray(mask[i, :, :]).transpose(Image.FLIP_LEFT_RIGHT))
+
+        return image, mask
+
+
+class VerticalFlipNP(object):
+
+    def __init__(self, p=0.5):
+        self.p = p
+
+    def __call__(self, image, mask):
+
+        if random.random() < self.p:
+            image = image.transpose(Image.FLIP_TOP_BOTTOM)
+            for i in range(mask.shape[0]):
+                mask[i, :, :] = np.array(Image.fromarray(mask[i, :, :]).transpose(Image.FLIP_TOP_BOTTOM))
+
+        return image, mask
+
+
+class RotateNP(object):
+
+    def __init__(self, degrees):
+        self.degrees = degrees
+
+    def __call__(self, image, mask):
+
+        angle = random.choice(self.degrees)
+
+        if angle == 90:
+            image = image.transpose(Image.ROTATE_90)
+            for i in range(mask.shape[0]):
+                mask[i, :, :] = np.array(Image.fromarray(mask[i, :, :]).transpose(Image.ROTATE_90))
+        elif angle == 180:
+            image = image.transpose(Image.ROTATE_180)
+            for i in range(mask.shape[0]):
+                mask[i, :, :] = np.array(Image.fromarray(mask[i, :, :]).transpose(Image.ROTATE_180))
+        elif angle == 270:
+            image = image.transpose(Image.ROTATE_270)
+            for i in range(mask.shape[0]):
+                mask[i, :, :] = np.array(Image.fromarray(mask[i, :, :]).transpose(Image.ROTATE_270))
+
+        return image, mask
+
+
 class Resize(object):
     def __init__(self, p=0.5, scales=[(320, 320), (192, 192), (384, 384), (128, 128)]):
         self.scales = scales
@@ -164,7 +219,27 @@ class ToTensor(object):
         image = torch.from_numpy(image.transpose((2, 0, 1)))
 
         # mask transform to semantic
-        mask = torch.from_numpy(mask_to_semantic(mask, labels, smooth=smooth).transpose((2, 0, 1)))
+        mask = torch.from_numpy(mask_to_semantic(mask, labels, smooth=smooth))
+        return image, mask
+
+
+class ToTensorNP(object):
+    def __call__(self, image, mask, labels=[100, 200, 300, 400, 500, 600, 700, 800], mode="train", smooth=False):
+        # image transform
+
+        image = np.array(image).astype(np.float)
+        mask = np.array(mask)
+
+        if mode == "test":
+            image /= 255
+            image = torch.from_numpy(image.transpose((2, 0, 1)))
+            return image
+
+        image /= 255
+        image = torch.from_numpy(image.transpose((2, 0, 1)))
+
+        # mask transform to semantic
+        mask = torch.from_numpy(mask)
         return image, mask
 
 
