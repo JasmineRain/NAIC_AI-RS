@@ -6,3 +6,4 @@ from .DANet import *
 from .RendDANet import *
 from .RendUNet import *
 from .SEDANet import *
+from .scSEUNet import *

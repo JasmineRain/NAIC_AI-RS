@@ -2,14 +2,15 @@ import argparse
 import numpy as np
 import os
 from util import semantic_to_mask, mask_to_semantic, get_confusion_matrix, get_miou
+import torch.nn.functional as F
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 2, 5, 6'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
 import torch
 import torch.nn as nn
 from torch.optim import SGD, lr_scheduler, adamw
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from models import UNetPP, UNet, rf101, DANet, SEDANet
+from models import UNetPP, UNet, rf101, DANet, SEDANet, scSEUNet
 from loss import lovasz_softmax, LabelSmoothSoftmaxCE, LabelSmoothCE
 from utils_Deeplab import SyncBN2d
 from models.DeepLabV3_plus import deeplabv3_plus
@@ -28,8 +29,8 @@ def train_val(config):
     writer = SummaryWriter(
         comment="LR_%f_BS_%d_MODEL_%s_DATA_%s" % (config.lr, config.batch_size, config.model_type, config.data_type))
 
-    if config.model_type not in ['UNet', 'UNet++', 'RefineNet', 'DANet', 'Deeplabv3+', 'SEDANet', 'HRNet_OCR']:
-        print('ERROR!! model_type should be selected in supported HRNet+OCR')
+    if config.model_type not in ['UNet', 'UNet++', 'RefineNet', 'DANet', 'Deeplabv3+', 'SEDANet', 'HRNet_OCR', 'scSEUNet']:
+        print('ERROR!! model_type should be selected in supported model')
         print('Choose model %s' % config.model_type)
         return
     if config.model_type == "UNet":
@@ -46,6 +47,8 @@ def train_val(config):
         model = deeplabv3_plus.DeepLabv3_plus(in_channels=3, num_classes=8, backend='resnet101', os=16, pretrained=True, norm_layer=SyncBN2d)
     elif config.model_type == "HRNet_OCR":
         model = seg_hrnet_ocr.get_seg_model()
+    elif config.model_type == "scSEUNet":
+        model = scSEUNet(pretrained=True, norm_layer=SyncBN2d)
     else:
         model = UNet()
 
@@ -129,7 +132,7 @@ def train_val(config):
                 mask = mask.cpu().numpy()
                 pred = model(image)
                 # val_loss += lovasz_softmax(pred, target).item()
-                val_loss += criterion(pred, target).item()
+                val_loss += F.cross_entropy(pred, target).item()
                 pred = pred.cpu().detach().numpy()
                 mask = semantic_to_mask(mask, labels)
                 pred = semantic_to_mask(pred, labels)
@@ -142,6 +145,7 @@ def train_val(config):
                     writer.add_images('mask_b/pred', pred[3, :, :], epoch + 1, dataformats='HW')
                 locker += 1
 
+                # break
             miou = get_miou(cm)
             if miou.mean() > max_miou:
                 if torch.__version__ == "1.6.0":
@@ -172,10 +176,10 @@ if __name__ == '__main__':
     parser.add_argument('--img_ch', type=int, default=3)
     parser.add_argument('--output_ch', type=int, default=8)
     parser.add_argument('--num_epochs', type=int, default=1000)
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--lr', type=float, default=1e-2)
-    parser.add_argument('--model_type', type=str, default='Deeplabv3+', help='UNet/UNet++/RefineNet')
+    parser.add_argument('--model_type', type=str, default='scSEUNet', help='UNet/UNet++/RefineNet')
     parser.add_argument('--data_type', type=str, default='multi', help='single/multi')
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
     parser.add_argument('--optimizer', type=str, default='sgd', help='sgd/adam/adamw')
@@ -186,7 +190,7 @@ if __name__ == '__main__':
     parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train_pseudo/mask")
     parser.add_argument('--val_img_dir', type=str, default="../data/PCL/val/image")
     parser.add_argument('--val_mask_dir', type=str, default="../data/PCL/val/mask")
-    parser.add_argument('--num_train', type=int, default=90000, help="4800/1600")
+    parser.add_argument('--num_train', type=int, default=190000, help="4800/1600")
     parser.add_argument('--num_val', type=int, default=10000, help="1200/400")
     parser.add_argument('--model_path', type=str, default='./model')
     parser.add_argument('--result_path', type=str, default='./exp')
