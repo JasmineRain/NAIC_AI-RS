@@ -8,12 +8,13 @@ import cv2
 from data_loader import get_dataloader
 import torch.nn as nn
 
+
 @torch.no_grad()
 def generate_test():
 
     output_dir = "../data/PCL/results"
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    model = torch.load("./exp/22_DANet.pth")
+    model = torch.load("./exp/22_DANet.pth").module
 
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")

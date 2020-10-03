@@ -212,10 +212,15 @@ class ToTensor(object):
 
         if mode == "test":
             image /= 255
+            # for i in range(image.shape[2]):
+            #     image[:, :, i] = (image[:, :, i] - np.min(image[:, :, i])) / (
+            #                 np.max(image[:, :, i]) - np.min(image[:, :, i]))
             image = torch.from_numpy(image.transpose((2, 0, 1)))
             return image
 
         image /= 255
+        # for i in range(image.shape[2]):
+        #     image[:, :, i] = (image[:, :, i] - np.min(image[:, :, i])) / (np.max(image[:, :, i]) - np.min(image[:, :, i]))
         image = torch.from_numpy(image.transpose((2, 0, 1)))
 
         # mask transform to semantic

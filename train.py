@@ -4,7 +4,7 @@ import os
 from util import semantic_to_mask, mask_to_semantic, get_confusion_matrix, get_miou
 import torch.nn.functional as F
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1, 3'
 import torch
 import torch.nn as nn
 from torch.optim import SGD, lr_scheduler, adamw
@@ -53,7 +53,7 @@ def train_val(config):
         model = UNet()
 
     if config.iscontinue:
-        model = torch.load("./exp/21_Deeplabv3+.pth")
+        model = torch.load("./exp/24_Deeplabv3+_0.7825757691389714.pth").module
 
     for k, m in model.named_modules():
         m._non_persistent_buffers_set = set()  # pytorch 1.6.0 compatability
@@ -85,7 +85,8 @@ def train_val(config):
         criterion = nn.CrossEntropyLoss()
 
     # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[25, 30, 35, 40], gamma=0.5)
-    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-5)
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=3, verbose=True)
+    # scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-6)
 
     global_step = 0
     max_miou = 0
@@ -93,8 +94,9 @@ def train_val(config):
         epoch_loss = 0.0
         cm = np.zeros([8, 8])
         with tqdm(total=config.num_train, desc="Epoch %d / %d" % (epoch + 1, config.num_epochs),
-                  unit='img') as train_pbar:
+                  unit='img', ncols=100) as train_pbar:
             model.train()
+            print(optimizer.param_groups[0]['lr'])
             for image, mask in train_loader:
                 image = image.to(device, dtype=torch.float32)
                 if config.smooth == "edge":
@@ -118,12 +120,12 @@ def train_val(config):
                 # if global_step > 10:
                 #     break
 
-            scheduler.step()
-            print("training epoch loss: " + str(epoch_loss))
+            # scheduler.step()
+            print("training epoch loss: " + str(epoch_loss / (float(config.num_train) / (float(config.batch_size)))))
 
         val_loss = 0
         with tqdm(total=config.num_val, desc="Epoch %d / %d validation round" % (epoch + 1, config.num_epochs),
-                  unit='img') as val_pbar:
+                  unit='img', ncols=100) as val_pbar:
             model.eval()
             locker = 0
             for image, mask in val_loader:
@@ -147,13 +149,15 @@ def train_val(config):
 
                 # break
             miou = get_miou(cm)
+            scheduler.step(miou.mean())
+
             if miou.mean() > max_miou:
                 if torch.__version__ == "1.6.0":
-                    torch.save(model.module,
+                    torch.save(model,
                                config.result_path + "/%d_%s_%s.pth" % (epoch + 1, config.model_type, str(miou.mean())),
                                _use_new_zipfile_serialization=False)
                 else:
-                    torch.save(model.module,
+                    torch.save(model,
                                config.result_path + "/%d_%s_%s.pth" % (epoch + 1, config.model_type, str(miou.mean())))
                 max_miou = miou.mean()
             print(miou)
@@ -176,21 +180,21 @@ if __name__ == '__main__':
     parser.add_argument('--img_ch', type=int, default=3)
     parser.add_argument('--output_ch', type=int, default=8)
     parser.add_argument('--num_epochs', type=int, default=1000)
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--lr', type=float, default=1e-2)
-    parser.add_argument('--model_type', type=str, default='scSEUNet', help='UNet/UNet++/RefineNet')
+    parser.add_argument('--model_type', type=str, default='Deeplabv3+', help='UNet/UNet++/RefineNet')
     parser.add_argument('--data_type', type=str, default='multi', help='single/multi')
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
     parser.add_argument('--optimizer', type=str, default='sgd', help='sgd/adam/adamw')
     parser.add_argument('--iscontinue', type=str, default=False, help='true/false')
-    parser.add_argument('--smooth', type=str, default="edge", help='true/false')
+    parser.add_argument('--smooth', type=str, default='edge', help='true/false')
 
-    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train_pseudo/image")
-    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train_pseudo/mask")
+    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train/image")
+    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train/mask")
     parser.add_argument('--val_img_dir', type=str, default="../data/PCL/val/image")
     parser.add_argument('--val_mask_dir', type=str, default="../data/PCL/val/mask")
-    parser.add_argument('--num_train', type=int, default=190000, help="4800/1600")
+    parser.add_argument('--num_train', type=int, default=90000, help="4800/1600")
     parser.add_argument('--num_val', type=int, default=10000, help="1200/400")
     parser.add_argument('--model_path', type=str, default='./model')
     parser.add_argument('--result_path', type=str, default='./exp')

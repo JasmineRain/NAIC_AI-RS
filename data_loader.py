@@ -83,7 +83,7 @@ def get_dataloader(img_dir, mask_dir, batch_size, num_workers, mode="train", smo
         return test_dataloader
     else:
         val_dataset = RSDataset(img_dir, mask_dir, mode='val', smooth=False)
-        val_dataloader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=num_workers)
+        val_dataloader = DataLoader(val_dataset, batch_size=64, shuffle=False, num_workers=num_workers)
         return val_dataloader
 
 
