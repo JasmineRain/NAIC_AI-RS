@@ -234,11 +234,11 @@ class RendDANet(BaseNet):
 
 if __name__ == "__main__":
     net = RendDANet(backbone='resnet101', nclass=8)
-    img = torch.rand(1, 3, 384, 384)
-    mask = torch.rand(1, 8, 384, 384)
+    img = torch.rand(4, 3, 384, 384)
+    mask = torch.rand(4, 8, 384, 384)
     net.train()
     output = net(img)
     for k, v in output.items():
         print(k, v.shape)
-    test = sampling_features(mask, output['points'], mode='nearest').squeeze().transpose(0, 1)
+    test = sampling_features(mask, output['points'], mode='nearest')
     print(test.shape)
