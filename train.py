@@ -4,7 +4,7 @@ import os
 from util import semantic_to_mask, mask_to_semantic, get_confusion_matrix, get_miou
 import torch.nn.functional as F
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1, 3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 2, 5, 6'
 import torch
 import torch.nn as nn
 from torch.optim import SGD, lr_scheduler, adamw
@@ -42,13 +42,13 @@ def train_val(config):
     elif config.model_type == "RefineNet":
         model = rf101()
     elif config.model_type == "DANet":
-        model = DANet(backbone='resnet101', nclass=config.output_ch, pretrained=True, norm_layer=SyncBN2d)
+        model = DANet(backbone='resnet101', nclass=config.output_ch, pretrained=True, norm_layer=nn.BatchNorm2d)
     elif config.model_type == "Deeplabv3+":
-        model = deeplabv3_plus.DeepLabv3_plus(in_channels=3, num_classes=8, backend='resnet101', os=16, pretrained=True, norm_layer=SyncBN2d)
+        model = deeplabv3_plus.DeepLabv3_plus(in_channels=3, num_classes=8, backend='resnet101', os=16, pretrained=True, norm_layer=nn.BatchNorm2d)
     elif config.model_type == "HRNet_OCR":
         model = seg_hrnet_ocr.get_seg_model()
     elif config.model_type == "scSEUNet":
-        model = scSEUNet(pretrained=True, norm_layer=SyncBN2d)
+        model = scSEUNet(pretrained=True, norm_layer=nn.BatchNorm2d)
     else:
         model = UNet()
 
@@ -85,18 +85,20 @@ def train_val(config):
         criterion = nn.CrossEntropyLoss()
 
     # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[25, 30, 35, 40], gamma=0.5)
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=3, verbose=True)
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=5, verbose=True)
     # scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-6)
 
     global_step = 0
-    max_miou = 0
+    max_fwiou = 0
+    frequency = np.array([0.1051, 0.0607, 0.1842, 0.1715, 0.0869, 0.1572, 0.0512, 0.1832])
     for epoch in range(config.num_epochs):
         epoch_loss = 0.0
         cm = np.zeros([8, 8])
+        print(optimizer.param_groups[0]['lr'])
         with tqdm(total=config.num_train, desc="Epoch %d / %d" % (epoch + 1, config.num_epochs),
                   unit='img', ncols=100) as train_pbar:
             model.train()
-            print(optimizer.param_groups[0]['lr'])
+
             for image, mask in train_loader:
                 image = image.to(device, dtype=torch.float32)
                 if config.smooth == "edge":
@@ -121,7 +123,7 @@ def train_val(config):
                 #     break
 
             # scheduler.step()
-            print("training epoch loss: " + str(epoch_loss / (float(config.num_train) / (float(config.batch_size)))))
+            print("\ntraining epoch loss: " + str(epoch_loss / (float(config.num_train) / (float(config.batch_size)))))
 
         val_loss = 0
         with tqdm(total=config.num_val, desc="Epoch %d / %d validation round" % (epoch + 1, config.num_epochs),
@@ -149,20 +151,23 @@ def train_val(config):
 
                 # break
             miou = get_miou(cm)
-            scheduler.step(miou.mean())
+            fw_miou = (miou * frequency).sum()
+            scheduler.step(fw_miou)
 
-            if miou.mean() > max_miou:
+            if fw_miou > max_fwiou:
                 if torch.__version__ == "1.6.0":
                     torch.save(model,
-                               config.result_path + "/%d_%s_%s.pth" % (epoch + 1, config.model_type, str(miou.mean())),
+                               config.result_path + "/%d_%s_%.4f.pth" % (epoch + 1, config.model_type, fw_miou),
                                _use_new_zipfile_serialization=False)
                 else:
                     torch.save(model,
-                               config.result_path + "/%d_%s_%s.pth" % (epoch + 1, config.model_type, str(miou.mean())))
-                max_miou = miou.mean()
+                               config.result_path + "/%d_%s_%.4f.pth" % (epoch + 1, config.model_type, fw_miou))
+                max_fwiou = fw_miou
+            print("\n")
             print(miou)
-            print("testing epoch loss: " + str(val_loss))
-            writer.add_scalar('miou/val', miou.mean(), epoch + 1)
+            print("testing epoch loss: " + str(val_loss), "FWmIoU = %.4f" % fw_miou)
+            writer.add_scalar('mIoU/val', miou.mean(), epoch + 1)
+            writer.add_scalar('FWIoU/val', fw_miou, epoch + 1)
             writer.add_scalar('loss/val', val_loss, epoch + 1)
             for idx, name in enumerate(objects):
                 writer.add_scalar('iou/val' + name, miou[idx], epoch + 1)
@@ -180,7 +185,7 @@ if __name__ == '__main__':
     parser.add_argument('--img_ch', type=int, default=3)
     parser.add_argument('--output_ch', type=int, default=8)
     parser.add_argument('--num_epochs', type=int, default=1000)
-    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--lr', type=float, default=1e-2)
     parser.add_argument('--model_type', type=str, default='Deeplabv3+', help='UNet/UNet++/RefineNet')
@@ -188,7 +193,7 @@ if __name__ == '__main__':
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
     parser.add_argument('--optimizer', type=str, default='sgd', help='sgd/adam/adamw')
     parser.add_argument('--iscontinue', type=str, default=False, help='true/false')
-    parser.add_argument('--smooth', type=str, default='edge', help='true/false')
+    parser.add_argument('--smooth', type=str, default=False, help='true/false')
 
     parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train/image")
     parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train/mask")

@@ -23,9 +23,9 @@ class RSDataset(Dataset):
         self.rt = Rotate(degrees=(90, 180, 270))
         self.rs = Resize(scales=[(320, 320), (192, 192), (384, 384), (128, 128)], p=0.5)
         self.bt = Brighten(alpha=1.4, p=0.5)
-        self.cl = Color(alpha=1.5, p=0.5)
-        self.ct = Contrast(alpha=1.5, p=0.5)
-        self.gb = GaussianBlur(radius=1.5, p=0.5)
+        self.cl = Color(alpha=1.5, p=1)
+        self.ct = Contrast(alpha=1.5, p=1)
+        self.gb = GaussianBlur(radius=1.5, p=1)
         self.tt = ToTensor()
         self.nl = Normalize()
 
@@ -46,11 +46,16 @@ class RSDataset(Dataset):
                 image, mask = self.hf(image, mask)
             elif seed == 2:
                 image, mask = self.rt(image, mask)
-
-            image = self.bt(image)
-            image = self.cl(image)
-            image = self.ct(image)
-            image = self.gb(image)
+            seed = np.random.randint(0, 4, 1)
+            if seed == 0:
+                pass
+            elif seed == 1:
+                image = self.bt(image)
+            elif seed == 2:
+                image = self.cl(image)
+            elif seed == 3:
+                image = self.ct(image)
+            # image = self.gb(image)
             image, mask = self.tt(image, mask, labels=self.labels, smooth=self.smooth)
             image, mask = self.nl(image, mask)
 

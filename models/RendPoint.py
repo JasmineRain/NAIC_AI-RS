@@ -105,7 +105,9 @@ def sampling_points_v2(mask, N=4, k=3, beta=0.75, training=True):
         H_step, W_step = 1 / H, 1 / W
         N = min(H * W, N)
 
-        uncertainty_map = -1 * (mask[:, 0] - mask[:, 1])
+        temp, _ = torch.sort(mask, dim=1, descending=True)
+        temp = temp.detach()
+        uncertainty_map = -1 * (temp[:, 0, :, :] - temp[:, 1, :, :])
         _, idx = uncertainty_map.view(B, -1).topk(N, dim=1)
 
         points = torch.zeros(B, N, 2, dtype=torch.float, device=device)
@@ -125,8 +127,9 @@ def sampling_points_v2(mask, N=4, k=3, beta=0.75, training=True):
     over_generation = torch.rand(B, k * N, 2, device=device)
     over_generation_map = sampling_features(mask, over_generation, align_corners=True)
 
-    uncertainty_map = -1 * (over_generation_map[:, 0] - over_generation_map[:, 1])
-    # uncertainty_map = torch.abs(over_generation_map - 0.5).view(B, -1)
+    temp, _ = torch.sort(over_generation_map, dim=1, descending=True)
+    temp = temp.detach()
+    uncertainty_map = -1 * (temp[:, 0, :, :] - temp[:, 1, :, :])
 
     _, idx = uncertainty_map.topk(int(beta * N), dim=-1, largest=False)
 
