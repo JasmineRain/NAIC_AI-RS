@@ -126,7 +126,7 @@ class SegNet(nn.Module):
         super(SegNet, self).__init__()
 
         pretrained = models.resnet50(pretrained=pretrained, progress=True, replace_stride_with_dilation=[0, 1, 1])
-        # pretrained.load_state_dict(torch.load("./resnet50-19c8e357.pth"))
+        pretrained.load_state_dict(torch.load("./resnet50-19c8e357.pth"))
 
         self.refine = RefineUnit(in_channel=3, out_channel=64, residual=False)
 

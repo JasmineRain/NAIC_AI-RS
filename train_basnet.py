@@ -94,7 +94,7 @@ def train_val(config):
 
             for image, mask in train_loader:
                 image = image.to(device, dtype=torch.float32)
-                mask = mask.to(device, dtype=torch.long).argmax(dim=1)
+                mask = mask.to(device, dtype=torch.float32)
 
                 pred = model(image)
                 loss = criterion(pred, mask)

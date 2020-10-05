@@ -4,7 +4,7 @@ import os
 from util import semantic_to_mask, mask_to_semantic, get_confusion_matrix, get_miou
 import torch.nn.functional as F
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 2, 5, 6'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
 import torch
 import torch.nn as nn
 from torch.optim import SGD, lr_scheduler, adamw
@@ -36,7 +36,7 @@ def train_val(config):
     elif config.model_type == "SEDANet":
         model = SEDANet()
     elif config.model_type == "RendDANet":
-        model = RendDANet(nclass=8)
+        model = RendDANet(nclass=8, backbone="resnet101", norm_layer=nn.BatchNorm2d)
     elif config.model_type == "RefineNet":
         model = rf101()
     elif config.model_type == "DANet":

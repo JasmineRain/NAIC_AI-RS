@@ -269,11 +269,11 @@ class BASNet(nn.Module):
         self.relu1d_2 = nn.ReLU(inplace=True)
 
         ## -------------Bilinear Upsampling--------------
-        self.upscore6 = nn.Upsample(scale_factor=32, mode='bilinear')  ###
-        self.upscore5 = nn.Upsample(scale_factor=16, mode='bilinear')
-        self.upscore4 = nn.Upsample(scale_factor=8, mode='bilinear')
-        self.upscore3 = nn.Upsample(scale_factor=4, mode='bilinear')
-        self.upscore2 = nn.Upsample(scale_factor=2, mode='bilinear')
+        self.upscore6 = nn.Upsample(scale_factor=32, mode='bilinear', align_corners=True)  ###
+        self.upscore5 = nn.Upsample(scale_factor=16, mode='bilinear', align_corners=True)
+        self.upscore4 = nn.Upsample(scale_factor=8, mode='bilinear', align_corners=True)
+        self.upscore3 = nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True)
+        self.upscore2 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
 
         ## -------------Side Output--------------
         self.outconvb = nn.Conv2d(512, n_classes, 3, padding=1)
