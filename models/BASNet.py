@@ -379,5 +379,3 @@ class BASNet(nn.Module):
 
         return dout, d1, d2, d3, d4, d5, d6, db
 
-        # return torch.sigmoid(dout), torch.sigmoid(d1), torch.sigmoid(d2), torch.sigmoid(d3), torch.sigmoid(d4), torch.sigmoid(d5), torch.sigmoid(
-        #     d6), torch.sigmoid(db)

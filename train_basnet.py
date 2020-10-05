@@ -10,8 +10,8 @@ import torch.nn as nn
 from torch.optim import SGD, lr_scheduler, adamw
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from models import UNetPP, UNet, rf101, DANet, SEDANet, scSEUNet
-from loss import lovasz_softmax, LabelSmoothSoftmaxCE, LabelSmoothCE
+from models import UNetPP, UNet, rf101, DANet, SEDANet, scSEUNet, BASNet
+from loss import LabelSmoothSoftmaxCE, LabelSmoothCE, BasLoss
 from utils_Deeplab import SyncBN2d
 from models.DeepLabV3_plus import deeplabv3_plus
 from models.HRNetOCR import seg_hrnet_ocr
@@ -37,6 +37,8 @@ def train_val(config):
         model = SEDANet()
     elif config.model_type == "RefineNet":
         model = rf101()
+    elif config.model_type == "BASNet":
+        model = BASNet(n_classes=8)
     elif config.model_type == "DANet":
         model = DANet(backbone='resnet101', nclass=config.output_ch, pretrained=True, norm_layer=nn.BatchNorm2d)
     elif config.model_type == "Deeplabv3+":
@@ -73,12 +75,7 @@ def train_val(config):
     # weight = torch.tensor([1, 1.5, 1, 2, 1.5, 2, 2, 1.2]).to(device)
     # criterion = nn.CrossEntropyLoss(weight=weight)
 
-    if config.smooth == "all":
-        criterion = LabelSmoothSoftmaxCE()
-    elif config.smooth == "edge":
-        criterion = LabelSmoothCE()
-    else:
-        criterion = nn.CrossEntropyLoss()
+    criterion = BasLoss()
 
     # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[25, 30, 35, 40], gamma=0.5)
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=5, verbose=True)
@@ -97,14 +94,10 @@ def train_val(config):
 
             for image, mask in train_loader:
                 image = image.to(device, dtype=torch.float32)
-                if config.smooth == "edge":
-                    mask = mask.to(device, dtype=torch.float32)
-                else:
-                    mask = mask.to(device, dtype=torch.long).argmax(dim=1)
+                mask = mask.to(device, dtype=torch.long).argmax(dim=1)
 
                 pred = model(image)
                 loss = criterion(pred, mask)
-                # loss = lovasz_softmax(torch.softmax(pred, dim=1), mask)
                 epoch_loss += loss.item()
 
                 writer.add_scalar('Loss/train', loss.item(), global_step)
@@ -130,8 +123,7 @@ def train_val(config):
                 image = image.to(device, dtype=torch.float32)
                 target = mask.to(device, dtype=torch.long).argmax(dim=1)
                 mask = mask.cpu().numpy()
-                pred = model(image)
-                # val_loss += lovasz_softmax(pred, target).item()
+                pred, _, _, _, _, _, _, _ = model(image)
                 val_loss += F.cross_entropy(pred, target).item()
                 pred = pred.cpu().detach().numpy()
                 mask = semantic_to_mask(mask, labels)
@@ -184,7 +176,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--lr', type=float, default=1e-2)
-    parser.add_argument('--model_type', type=str, default='Deeplabv3+', help='UNet/UNet++/RefineNet')
+    parser.add_argument('--model_type', type=str, default='BASNet', help='UNet/UNet++/RefineNet')
     parser.add_argument('--data_type', type=str, default='multi', help='single/multi')
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
     parser.add_argument('--optimizer', type=str, default='sgd', help='sgd/adam/adamw')
