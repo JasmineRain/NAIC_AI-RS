@@ -39,22 +39,24 @@ class RSDataset(Dataset):
         mask = Image.open(os.path.join(self.mask_dir, self.masks[item]))
 
         if self.mode == "train":
-            seed = np.random.randint(0, 3, 1)
+            seed = np.random.randint(0, 4, 1)
             if seed == 0:
                 pass
             elif seed == 1:
                 image, mask = self.hf(image, mask)
             elif seed == 2:
                 image, mask = self.rt(image, mask)
-            seed = np.random.randint(0, 4, 1)
-            if seed == 0:
-                pass
-            elif seed == 1:
-                image = self.bt(image)
-            elif seed == 2:
-                image = self.cl(image)
             elif seed == 3:
-                image = self.ct(image)
+                image, mask = self.vf(image, mask)
+            # seed = np.random.randint(0, 4, 1)
+            # if seed == 0:
+            #     pass
+            # elif seed == 1:
+            #     image = self.bt(image)
+            # elif seed == 2:
+            #     image = self.cl(image)
+            # elif seed == 3:
+            #     image = self.ct(image)
             # image = self.gb(image)
             image, mask = self.tt(image, mask, labels=self.labels, smooth=self.smooth)
             image, mask = self.nl(image, mask)
