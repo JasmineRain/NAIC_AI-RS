@@ -39,15 +39,13 @@ class RSDataset(Dataset):
         mask = Image.open(os.path.join(self.mask_dir, self.masks[item]))
 
         if self.mode == "train":
-            seed = np.random.randint(0, 4, 1)
+            seed = np.random.randint(0, 3, 1)
             if seed == 0:
                 pass
             elif seed == 1:
                 image, mask = self.hf(image, mask)
             elif seed == 2:
                 image, mask = self.rt(image, mask)
-            elif seed == 3:
-                image, mask = self.vf(image, mask)
             # seed = np.random.randint(0, 4, 1)
             # if seed == 0:
             #     pass

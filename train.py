@@ -81,8 +81,8 @@ def train_val(config):
         criterion = nn.CrossEntropyLoss()
 
     # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[25, 30, 35, 40], gamma=0.5)
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=5, verbose=True)
-    # scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-6)
+    # scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=5, verbose=True)
+    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-4)
 
     global_step = 0
     max_fwiou = 0
@@ -150,7 +150,7 @@ def train_val(config):
             fw_miou = (miou * frequency).sum()
             scheduler.step(fw_miou)
 
-            if fw_miou > max_fwiou:
+            if True:
                 if torch.__version__ == "1.6.0":
                     torch.save(model,
                                config.result_path + "/%d_%s_%.4f.pth" % (epoch + 1, config.model_type, fw_miou),
@@ -183,7 +183,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=1000)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--lr', type=float, default=1e-2)
+    parser.add_argument('--lr', type=float, default=8e-3)
     parser.add_argument('--model_type', type=str, default='Deeplabv3+', help='UNet/UNet++/RefineNet')
     parser.add_argument('--data_type', type=str, default='multi', help='single/multi')
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
