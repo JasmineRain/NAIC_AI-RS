@@ -32,6 +32,9 @@ class DeepLabv3_plus(nn.Module):
         elif 'xception' in backend:
             self.backend = backbone.AlignedXception(BatchNorm=norm_layer, pretrained=pretrained, output_stride=os)
             self.backend.lastconv_channel = 2048
+        elif 'resnest' in backend:
+            self.backend = backbone.ResNeSt(backbone=backend, norm_layer=norm_layer, pretrained=pretrained)
+            self.backend.lastconv_channel = 2048
         else:
             raise NotImplementedError
 
@@ -183,6 +186,6 @@ class ShuffleNetBackend(nn.Module):
 if __name__ == '__main__':
     from torchsummary import summary
 
-    deeplabv3_ = DeepLabv3_plus(in_channels=3, num_classes=8, backend='resnet101', os=16, pretrained=False)
+    deeplabv3_ = DeepLabv3_plus(in_channels=3, num_classes=8, backend='resnest101', os=16, pretrained=False)
     img = torch.rand(8, 3, 256, 256)
     deeplabv3_(img)
