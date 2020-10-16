@@ -143,7 +143,7 @@ class BASNet(nn.Module):
         super(BASNet, self).__init__()
 
         resnet = models.resnet34(pretrained=False)
-        resnet.load_state_dict(torch.load("./resnet34-333f7ec4.pth"))
+        resnet.load_state_dict(torch.load("./resnet34-333f7ec4.pth", map_location='cpu'))
 
         ## -------------Encoder--------------
 

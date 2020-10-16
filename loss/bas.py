@@ -35,13 +35,14 @@ class IOU(torch.nn.Module):
 
 def ce_ssim_loss(pred, target):
     ce_loss = nn.CrossEntropyLoss()
-    ssim_loss = SSIM(window_size=11,size_average=True)
-    iou_loss = IOU(size_average=True)
+    # ssim_loss = SSIM(window_size=11,size_average=True)
+    # iou_loss = IOU(size_average=True)
     ce_out = ce_loss(pred, target.argmax(dim=1))
-    ssim_out = 1 - ssim_loss(torch.softmax(pred, dim=1), target)
-    iou_out = iou_loss(torch.softmax(pred, dim=1), target)
+    # ssim_out = 1 - ssim_loss(torch.softmax(pred, dim=1), target)
+    # iou_out = iou_loss(torch.softmax(pred, dim=1), target)
 
-    loss = ce_out + ssim_out + iou_out
+    # loss = ce_out + ssim_out + iou_out
+    loss = ce_out
 
     return loss
 
