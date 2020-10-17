@@ -4,7 +4,7 @@ import os
 from util import semantic_to_mask, mask_to_semantic, get_confusion_matrix, get_miou
 import torch.nn.functional as F
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 2, 5, 6'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
 import torch
 import torch.nn as nn
 from torch.optim import SGD, lr_scheduler, adamw
@@ -24,7 +24,7 @@ def train_val(config):
     train_loader = get_dataloader(img_dir=config.train_img_dir, mask_dir=config.train_mask_dir, mode="train",
                                   batch_size=config.batch_size, num_workers=config.num_workers, smooth=config.smooth)
     val_loader = get_dataloader(img_dir=config.val_img_dir, mask_dir=config.val_mask_dir, mode="val",
-                                batch_size=config.batch_size, num_workers=config.num_workers)
+                                batch_size=4, num_workers=config.num_workers)
 
     writer = SummaryWriter(
         comment="LR_%f_BS_%d_MODEL_%s_DATA_%s" % (config.lr, config.batch_size, config.model_type, config.data_type))
@@ -78,8 +78,8 @@ def train_val(config):
     criterion = BasLoss()
 
     # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[25, 30, 35, 40], gamma=0.5)
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=5, verbose=True)
-    # scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-6)
+    # scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=5, verbose=True)
+    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-4)
 
     global_step = 0
     max_fwiou = 0
@@ -94,7 +94,7 @@ def train_val(config):
 
             for image, mask in train_loader:
                 image = image.to(device, dtype=torch.float32)
-                mask = mask.to(device, dtype=torch.float32)
+                mask = mask.to(device, dtype=torch.float16)
 
                 pred = model(image)
                 loss = criterion(pred, mask)
@@ -113,52 +113,55 @@ def train_val(config):
 
             # scheduler.step()
             print("\ntraining epoch loss: " + str(epoch_loss / (float(config.num_train) / (float(config.batch_size)))))
+            torch.cuda.empty_cache()
 
         val_loss = 0
-        with tqdm(total=config.num_val, desc="Epoch %d / %d validation round" % (epoch + 1, config.num_epochs),
-                  unit='img', ncols=100) as val_pbar:
-            model.eval()
-            locker = 0
-            for image, mask in val_loader:
-                image = image.to(device, dtype=torch.float32)
-                target = mask.to(device, dtype=torch.long).argmax(dim=1)
-                mask = mask.cpu().numpy()
-                pred, _, _, _, _, _, _, _ = model(image)
-                val_loss += F.cross_entropy(pred, target).item()
-                pred = pred.cpu().detach().numpy()
-                mask = semantic_to_mask(mask, labels)
-                pred = semantic_to_mask(pred, labels)
-                cm += get_confusion_matrix(mask, pred, labels)
-                val_pbar.update(image.shape[0])
-                if locker == 25:
-                    writer.add_images('mask_a/true', mask[2, :, :], epoch + 1, dataformats='HW')
-                    writer.add_images('mask_a/pred', pred[2, :, :], epoch + 1, dataformats='HW')
-                    writer.add_images('mask_b/true', mask[3, :, :], epoch + 1, dataformats='HW')
-                    writer.add_images('mask_b/pred', pred[3, :, :], epoch + 1, dataformats='HW')
-                locker += 1
+        with torch.no_grad():
+            with tqdm(total=config.num_val, desc="Epoch %d / %d validation round" % (epoch + 1, config.num_epochs),
+                      unit='img', ncols=100) as val_pbar:
+                model.eval()
+                locker = 0
+                for image, mask in val_loader:
+                    image = image.to(device, dtype=torch.float32)
+                    target = mask.to(device, dtype=torch.long).argmax(dim=1)
+                    mask = mask.cpu().numpy()
+                    pred, _, _, _, _, _, _, _ = model(image)
+                    val_loss += F.cross_entropy(pred, target).item()
+                    pred = pred.cpu().detach().numpy()
+                    mask = semantic_to_mask(mask, labels)
+                    pred = semantic_to_mask(pred, labels)
+                    cm += get_confusion_matrix(mask, pred, labels)
+                    val_pbar.update(image.shape[0])
+                    if locker == 25:
+                        writer.add_images('mask_a/true', mask[2, :, :], epoch + 1, dataformats='HW')
+                        writer.add_images('mask_a/pred', pred[2, :, :], epoch + 1, dataformats='HW')
+                        writer.add_images('mask_b/true', mask[3, :, :], epoch + 1, dataformats='HW')
+                        writer.add_images('mask_b/pred', pred[3, :, :], epoch + 1, dataformats='HW')
+                    locker += 1
 
-                # break
-            miou = get_miou(cm)
-            fw_miou = (miou * frequency).sum()
-            scheduler.step(fw_miou)
+                    # break
+                miou = get_miou(cm)
+                fw_miou = (miou * frequency).sum()
+                scheduler.step()
 
-            if fw_miou > max_fwiou:
-                if torch.__version__ == "1.6.0":
-                    torch.save(model,
-                               config.result_path + "/%d_%s_%.4f.pth" % (epoch + 1, config.model_type, fw_miou),
-                               _use_new_zipfile_serialization=False)
-                else:
-                    torch.save(model,
-                               config.result_path + "/%d_%s_%.4f.pth" % (epoch + 1, config.model_type, fw_miou))
-                max_fwiou = fw_miou
-            print("\n")
-            print(miou)
-            print("testing epoch loss: " + str(val_loss), "FWmIoU = %.4f" % fw_miou)
-            writer.add_scalar('mIoU/val', miou.mean(), epoch + 1)
-            writer.add_scalar('FWIoU/val', fw_miou, epoch + 1)
-            writer.add_scalar('loss/val', val_loss, epoch + 1)
-            for idx, name in enumerate(objects):
-                writer.add_scalar('iou/val' + name, miou[idx], epoch + 1)
+                if fw_miou > max_fwiou:
+                    if torch.__version__ == "1.6.0":
+                        torch.save(model,
+                                   config.result_path + "/%d_%s_%.4f.pth" % (epoch + 1, config.model_type, fw_miou),
+                                   _use_new_zipfile_serialization=False)
+                    else:
+                        torch.save(model,
+                                   config.result_path + "/%d_%s_%.4f.pth" % (epoch + 1, config.model_type, fw_miou))
+                    max_fwiou = fw_miou
+                print("\n")
+                print(miou)
+                print("testing epoch loss: " + str(val_loss), "FWmIoU = %.4f" % fw_miou)
+                writer.add_scalar('mIoU/val', miou.mean(), epoch + 1)
+                writer.add_scalar('FWIoU/val', fw_miou, epoch + 1)
+                writer.add_scalar('loss/val', val_loss, epoch + 1)
+                for idx, name in enumerate(objects):
+                    writer.add_scalar('iou/val' + name, miou[idx], epoch + 1)
+                torch.cuda.empty_cache()
     writer.close()
     print("Training finished")
 
@@ -173,9 +176,9 @@ if __name__ == '__main__':
     parser.add_argument('--img_ch', type=int, default=3)
     parser.add_argument('--output_ch', type=int, default=8)
     parser.add_argument('--num_epochs', type=int, default=1000)
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=32)
     parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--lr', type=float, default=1e-2)
+    parser.add_argument('--lr', type=float, default=8e-3)
     parser.add_argument('--model_type', type=str, default='BASNet', help='UNet/UNet++/RefineNet')
     parser.add_argument('--data_type', type=str, default='multi', help='single/multi')
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
@@ -183,12 +186,12 @@ if __name__ == '__main__':
     parser.add_argument('--iscontinue', type=str, default=False, help='true/false')
     parser.add_argument('--smooth', type=str, default=False, help='true/false')
 
-    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train/image")
-    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train/mask")
-    parser.add_argument('--val_img_dir', type=str, default="../data/PCL/val/image")
-    parser.add_argument('--val_mask_dir', type=str, default="../data/PCL/val/mask")
-    parser.add_argument('--num_train', type=int, default=90000, help="4800/1600")
-    parser.add_argument('--num_val', type=int, default=10000, help="1200/400")
+    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train_new/image")
+    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train_new/mask")
+    parser.add_argument('--val_img_dir', type=str, default="../data/PCL/val_new/image")
+    parser.add_argument('--val_mask_dir', type=str, default="../data/PCL/val_new/mask")
+    parser.add_argument('--num_train', type=int, default=98000, help="4800/1600")
+    parser.add_argument('--num_val', type=int, default=2000, help="1200/400")
     parser.add_argument('--model_path', type=str, default='./model')
     parser.add_argument('--result_path', type=str, default='./exp')
 

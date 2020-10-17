@@ -78,8 +78,8 @@ def train_val(config):
     criterion = RendLoss()
 
     # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[25, 30, 35, 40], gamma=0.5)
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=5, verbose=True)
-    # scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-6)
+    # scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=5, verbose=True)
+    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-4)
 
     global_step = 0
     max_fwiou = 0
@@ -142,7 +142,7 @@ def train_val(config):
                 # break
             miou = get_miou(cm)
             fw_miou = (miou * frequency).sum()
-            scheduler.step(fw_miou)
+            scheduler.step()
 
             if fw_miou > max_fwiou:
                 if torch.__version__ == "1.6.0":
