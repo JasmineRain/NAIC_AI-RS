@@ -11,4 +11,4 @@
 -- *.py：工具方法以及训练文件  
 -- ensemble_test：最终使用的推理文件，用于复现A，B榜所有提交结果（路径按需设置）
 
-PS：由于文件大小限制，本队伍所使用的模型已放在百度网盘，链接见方案说明
+PS：由于文件大小限制，本队伍所使用的模型已放在百度网盘，链接见[方案说明](https://github.com/JasmineRain/NAIC_AI-RS/blob/master/METHOD.md)

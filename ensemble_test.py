@@ -20,15 +20,15 @@ def rot(input, k, degree):
 
 @torch.no_grad()
 def generate_test():
-    batch_size = 64
+    batch_size = 128
 
-    # input = "../data/PCL/image_A"
+    # input = "../data/PCL/image_B"
     # input_dir = "../../ly/data/PCL/image_A"
     # mask_dir = "../../ly/data/PCL/image_A"
-    input_dir = "../data/PCL/image_A"
-    mask_dir = "../data/PCL/image_A"
+    input_dir = "../data/PCL/image_B"
+    mask_dir = "../data/PCL/image_B"
     output_dir = "../data/PCL/results"
-    models_dir = 'new_transform_models'
+    models_dir = './last_try_best'
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     images = list(sorted(os.listdir(input_dir)))
     models_path = [os.path.join(models_dir, name) for name in os.listdir(models_dir)]
@@ -36,7 +36,7 @@ def generate_test():
     for model_path in models_path:
         # if model_path.endswith('79.90.pth'):
             # continue
-        model = torch.load(model_path)
+        model = torch.load(model_path).module
         model = model.to(device)
         model.eval()
         models.append(model)
