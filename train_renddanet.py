@@ -4,7 +4,7 @@ import os
 from util import semantic_to_mask, mask_to_semantic, get_confusion_matrix, get_miou
 import torch.nn.functional as F
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 2, 5, 6'
 import torch
 import torch.nn as nn
 from torch.optim import SGD, lr_scheduler, adamw
@@ -51,7 +51,7 @@ def train_val(config):
         model = UNet()
 
     if config.iscontinue:
-        model = torch.load("./exp/24_Deeplabv3+_0.7825757691389714.pth").module
+        model = torch.load("./exp/30_RendDANet_0.7774.pth").module
 
     for k, m in model.named_modules():
         m._non_persistent_buffers_set = set()  # pytorch 1.6.0 compatability
@@ -175,22 +175,22 @@ if __name__ == '__main__':
     parser.add_argument('--img_ch', type=int, default=3)
     parser.add_argument('--output_ch', type=int, default=8)
     parser.add_argument('--num_epochs', type=int, default=1000)
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--lr', type=float, default=1e-2)
+    parser.add_argument('--lr', type=float, default=2e-3)
     parser.add_argument('--model_type', type=str, default='RendDANet', help='UNet/UNet++/RefineNet')
     parser.add_argument('--data_type', type=str, default='multi', help='single/multi')
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
     parser.add_argument('--optimizer', type=str, default='sgd', help='sgd/adam/adamw')
-    parser.add_argument('--iscontinue', type=str, default=False, help='true/false')
+    parser.add_argument('--iscontinue', type=str, default=True, help='true/false')
     parser.add_argument('--smooth', type=str, default=False, help='true/false')
 
-    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train/image")
-    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train/mask")
-    parser.add_argument('--val_img_dir', type=str, default="../data/PCL/val/image")
-    parser.add_argument('--val_mask_dir', type=str, default="../data/PCL/val/mask")
-    parser.add_argument('--num_train', type=int, default=90000, help="4800/1600")
-    parser.add_argument('--num_val', type=int, default=10000, help="1200/400")
+    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train_new/image")
+    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train_new/mask")
+    parser.add_argument('--val_img_dir', type=str, default="../data/PCL/val_new/image")
+    parser.add_argument('--val_mask_dir', type=str, default="../data/PCL/val_new/mask")
+    parser.add_argument('--num_train', type=int, default=98000, help="4800/1600")
+    parser.add_argument('--num_val', type=int, default=2000, help="1200/400")
     parser.add_argument('--model_path', type=str, default='./model')
     parser.add_argument('--result_path', type=str, default='./exp')
 

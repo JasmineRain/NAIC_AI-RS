@@ -27,7 +27,7 @@ def train_val(config):
                                 batch_size=config.batch_size, num_workers=config.num_workers)
 
     writer = SummaryWriter(
-        comment="LR_%f_BS_%d_MODEL_%s_DATA_%s" % (config.lr, config.batch_size, config.model_type, config.data_type))
+        comment="LR_%f_BS_%d_MODEL_%s" % (config.lr, config.batch_size, config.model_type))
 
     if config.model_type == "UNet":
         model = UNet()
@@ -44,7 +44,7 @@ def train_val(config):
     elif config.model_type == "HRNet_OCR":
         model = seg_hrnet_ocr.get_seg_model()
     elif config.model_type == "RendUNet":
-        model = RendUNet(n_class=config.output_ch)
+        model = RendUNet(n_class=config.output_ch, pretrained='resnet101', norm_layer=nn.BatchNorm2d)
     else:
         model = UNet()
 
@@ -76,8 +76,8 @@ def train_val(config):
     criterion = MultiRendLoss()
 
     # scheduler = lr_scheduler.MultiStepLR(optimizer, milestones=[25, 30, 35, 40], gamma=0.5)
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=5, verbose=True)
-    # scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-6)
+    # scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.1, patience=5, verbose=True)
+    scheduler = lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=15, eta_min=1e-4)
 
     global_step = 0
     max_fwiou = 0
@@ -122,7 +122,6 @@ def train_val(config):
                 target = mask.to(device, dtype=torch.long).argmax(dim=1)
                 mask = mask.cpu().numpy()
                 pred = model(image)['fine']
-                # val_loss += lovasz_softmax(pred, target).item()
                 val_loss += F.cross_entropy(pred, target).item()
                 pred = pred.cpu().detach().numpy()
                 mask = semantic_to_mask(mask, labels)
@@ -139,7 +138,7 @@ def train_val(config):
                 # break
             miou = get_miou(cm)
             fw_miou = (miou * frequency).sum()
-            scheduler.step(fw_miou)
+            scheduler.step()
 
             if fw_miou > max_fwiou:
                 if torch.__version__ == "1.6.0":
@@ -172,7 +171,7 @@ if __name__ == '__main__':
     parser.add_argument('--img_ch', type=int, default=3)
     parser.add_argument('--output_ch', type=int, default=8)
     parser.add_argument('--num_epochs', type=int, default=1000)
-    parser.add_argument('--batch_size', type=int, default=128)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--lr', type=float, default=1e-2)
     parser.add_argument('--model_type', type=str, default='RendUNet', help='UNet/UNet++/RefineNet')
@@ -181,12 +180,12 @@ if __name__ == '__main__':
     parser.add_argument('--iscontinue', type=str, default=False, help='true/false')
     parser.add_argument('--smooth', type=str, default=False, help='true/false')
 
-    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train/image")
-    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train/mask")
-    parser.add_argument('--val_img_dir', type=str, default="../data/PCL/val/image")
-    parser.add_argument('--val_mask_dir', type=str, default="../data/PCL/val/mask")
-    parser.add_argument('--num_train', type=int, default=90000, help="4800/1600")
-    parser.add_argument('--num_val', type=int, default=10000, help="1200/400")
+    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train_new/image")
+    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train_new/mask")
+    parser.add_argument('--val_img_dir', type=str, default="../data/PCL/val_new/image")
+    parser.add_argument('--val_mask_dir', type=str, default="../data/PCL/val_new/mask")
+    parser.add_argument('--num_train', type=int, default=98000, help="4800/1600")
+    parser.add_argument('--num_val', type=int, default=2000, help="1200/400")
     parser.add_argument('--model_path', type=str, default='./model')
     parser.add_argument('--result_path', type=str, default='./exp')
 

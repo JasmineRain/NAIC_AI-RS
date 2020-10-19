@@ -159,13 +159,13 @@ class PointHead(nn.Module):
     def __init__(self, in_c=520, num_classes=1, k=3, beta=0.75):
         super(PointHead, self).__init__()
         self.mlp = nn.Sequential(
-            nn.Conv1d(in_channels=in_c, out_channels=512, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.Conv1d(in_channels=in_c, out_channels=256, kernel_size=1, stride=1, padding=0, bias=False),
             nn.ReLU(inplace=True),
-            nn.Conv1d(in_channels=512, out_channels=512, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.Conv1d(in_channels=256, out_channels=256, kernel_size=1, stride=1, padding=0, bias=False),
             nn.ReLU(inplace=True),
-            nn.Conv1d(in_channels=512, out_channels=512, kernel_size=1, stride=1, padding=0, bias=False),
+            nn.Conv1d(in_channels=256, out_channels=256, kernel_size=1, stride=1, padding=0, bias=False),
             nn.ReLU(inplace=True),
-            nn.Conv1d(in_channels=512, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
+            nn.Conv1d(in_channels=256, out_channels=num_classes, kernel_size=1, stride=1, padding=0)
         )
         self.k = k
         self.beta = beta
