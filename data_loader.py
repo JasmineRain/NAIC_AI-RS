@@ -17,7 +17,7 @@ class RSDataset(Dataset):
         self.smooth = smooth
         self.images = list(sorted(os.listdir(img_dir)))
         self.masks = list(sorted(os.listdir(mask_dir)))
-        self.labels = [100, 200, 300, 400, 500, 600, 700, 800]
+        self.labels = [1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
         self.hf = HorizontalFlip(p=1)
         self.vf = VerticalFlip(p=1)
         self.rt = Rotate(degrees=(90, 180, 270))

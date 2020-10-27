@@ -37,7 +37,7 @@ def label_smooth(mask, semantic_map, labels, alpha, radius):
     return semantic_map
 
 
-def mask_to_semantic(mask, labels=[100, 200, 300, 400, 500, 600, 700, 800], smooth=False, alpha=0.2, radius=8):
+def mask_to_semantic(mask, labels=[1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], smooth=False, alpha=0.2, radius=8):
     # 标签图转语义图  labels代表所有的标签 [100, 200, 300, 400, 500, 600, 700, 800]
     # return shape [C, H, W]
 

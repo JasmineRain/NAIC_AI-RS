@@ -204,7 +204,7 @@ class GaussianBlur(object):
 
 class ToTensor(object):
 
-    def __call__(self, image, mask, labels=[100, 200, 300, 400, 500, 600, 700, 800], mode="train", smooth=False):
+    def __call__(self, image, mask, labels=[1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17], mode="train", smooth=False):
         # image transform
 
         image = np.array(image).astype(np.float)
