@@ -4,7 +4,7 @@ import os
 from util import semantic_to_mask, mask_to_semantic, get_confusion_matrix, get_miou
 import torch.nn.functional as F
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '1, 3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 2, 5, 6'
 import torch
 import torch.nn as nn
 from torch.optim import SGD, lr_scheduler, adamw
@@ -51,7 +51,6 @@ def train_val(config):
         src = "./pretrained/27_Deeplabv3+_nan.pth"
         pretrained_dict = torch.load(src, map_location='cpu').module.state_dict()
         print("load pretrained params from stage 1: " + src)
-        # print(pretrained_dict.keys())
         for key in list(pretrained_dict.keys()):
             if key.split('.')[0] == "cbr_last":
                 pretrained_dict.pop(key)
@@ -67,7 +66,7 @@ def train_val(config):
         model = UNet()
 
     if config.iscontinue:
-        model = torch.load("./exp/24_Deeplabv3+_0.7825757691389714.pth").module
+        model = torch.load("./exp/30_Deeplabv3+_0.7461.pth", map_location='cpu').module
 
     for k, m in model.named_modules():
         m._non_persistent_buffers_set = set()  # pytorch 1.6.0 compatability
@@ -110,6 +109,8 @@ def train_val(config):
     for epoch in range(config.num_epochs):
         epoch_loss = 0.0
         seed = np.random.randint(0, 3, 1)
+        seed = 0
+        print("seed is ", seed)
         if seed == 2:
             train_loader = get_dataloader(img_dir=config.train_img_dir, mask_dir=config.train_mask_dir, mode="train",
                                           batch_size=config.batch_size // 4, num_workers=config.num_workers,
@@ -225,14 +226,14 @@ if __name__ == '__main__':
     parser.add_argument('--img_ch', type=int, default=3)
     parser.add_argument('--output_ch', type=int, default=15)
     parser.add_argument('--num_epochs', type=int, default=1000)
-    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--lr', type=float, default=8e-3)
     parser.add_argument('--model_type', type=str, default='Deeplabv3+', help='UNet/UNet++/RefineNet')
     parser.add_argument('--data_type', type=str, default='multi', help='single/multi')
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
     parser.add_argument('--optimizer', type=str, default='sgd', help='sgd/adam/adamw')
-    parser.add_argument('--iscontinue', type=str, default=False, help='true/false')
+    parser.add_argument('--iscontinue', type=str, default=True, help='true/false')
     parser.add_argument('--smooth', type=str, default=False, help='true/false')
 
     parser.add_argument('--train_img_dir', type=str, default="../data/PCL/Stage2/train/image")
