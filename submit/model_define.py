@@ -4,29 +4,116 @@ from collections import OrderedDict
 import torch
 import math
 import torch.nn as nn
+from torch.nn import Module, Conv2d, Parameter, Softmax
 
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
 
-def conv3x3(in_planes, out_planes, stride=1, dilation=1):
-    """3x3 convolution with padding"""
+class PAM_Module(Module):
+    """ Position attention module"""
+
+    # Ref from SAGAN
+    def __init__(self, in_dim):
+        super(PAM_Module, self).__init__()
+        self.chanel_in = in_dim
+
+        self.query_conv = Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
+        self.key_conv = Conv2d(in_channels=in_dim, out_channels=in_dim // 8, kernel_size=1)
+        self.value_conv = Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
+        self.gamma = Parameter(torch.zeros(1))
+
+        self.softmax = Softmax(dim=-1)
+
+    def forward(self, x):
+        """
+            inputs :
+                x : input feature maps( B X C X H X W)
+            returns :
+                out : attention value + input feature
+                attention: B X (HxW) X (HxW)
+        """
+        m_batchsize, C, height, width = x.size()
+        proj_query = self.query_conv(x).view(m_batchsize, -1, width * height).permute(0, 2, 1)
+        proj_key = self.key_conv(x).view(m_batchsize, -1, width * height)
+        energy = torch.bmm(proj_query, proj_key)
+        attention = self.softmax(energy)
+        proj_value = self.value_conv(x).view(m_batchsize, -1, width * height)
+
+        out = torch.bmm(proj_value, attention.permute(0, 2, 1))
+        out = out.view(m_batchsize, C, height, width)
+
+        out = self.gamma * out + x
+        return out
+
+
+class CAM_Module(Module):
+    """ Channel attention module"""
+
+    def __init__(self, in_dim):
+        super(CAM_Module, self).__init__()
+        self.chanel_in = in_dim
+
+        self.gamma = Parameter(torch.zeros(1))
+        self.softmax = Softmax(dim=-1)
+
+    def forward(self, x):
+        """
+            inputs :
+                x : input feature maps( B X C X H X W)
+            returns :
+                out : attention value + input feature
+                attention: B X C X C
+        """
+        m_batchsize, C, height, width = x.size()
+        proj_query = x.view(m_batchsize, C, -1)
+        proj_key = x.view(m_batchsize, C, -1).permute(0, 2, 1)
+        energy = torch.bmm(proj_query, proj_key)
+        energy_new = torch.max(energy, -1, keepdim=True)[0].expand_as(energy) - energy
+        attention = self.softmax(energy_new)
+        proj_value = x.view(m_batchsize, C, -1)
+
+        out = torch.bmm(attention, proj_value)
+        out = out.view(m_batchsize, C, height, width)
+
+        out = self.gamma * out + x
+        return out
+
+
+def conv3x3_2(in_planes, out_planes, stride=1):
+    "3x3 convolution with padding"
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
-                     padding=dilation, dilation=dilation, bias=False)
+                     padding=1, bias=False)
 
 
-class BasicBlock(nn.Module):
-    expansion = 1
-
-    def __init__(self, inplanes, planes, stride=1, dilation=1, downsample=None):
-        super(BasicBlock, self).__init__()
-        self.conv1 = conv3x3(inplanes, planes, stride, dilation)
-        self.bn1 = nn.BatchNorm2d(planes)
+class Bottleneck2(nn.Module):
+    """ResNet Bottleneck
+    """
+    # pylint: disable=unused-argument
+    expansion = 4
+    def __init__(self, inplanes, planes, stride=1, dilation=1,
+                 downsample=None, previous_dilation=1, norm_layer=None):
+        super(Bottleneck2, self).__init__()
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
+        self.bn1 = norm_layer(planes)
+        self.conv2 = nn.Conv2d(
+            planes, planes, kernel_size=3, stride=stride,
+            padding=dilation, dilation=dilation, bias=False)
+        self.bn2 = norm_layer(planes)
+        self.conv3 = nn.Conv2d(
+            planes, planes * 4, kernel_size=1, bias=False)
+        self.bn3 = norm_layer(planes * 4)
         self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(planes, planes)
-        self.bn2 = nn.BatchNorm2d(planes)
         self.downsample = downsample
+        self.dilation = dilation
         self.stride = stride
+
+    def _sum_each(self, x, y):
+        assert(len(x) == len(y))
+        z = []
+        for i in range(len(x)):
+            z.append(x[i]+y[i])
+        return z
 
     def forward(self, x):
         residual = x
@@ -37,6 +124,10 @@ class BasicBlock(nn.Module):
 
         out = self.conv2(out)
         out = self.bn2(out)
+        out = self.relu(out)
+
+        out = self.conv3(out)
+        out = self.bn3(out)
 
         if self.downsample is not None:
             residual = self.downsample(x)
@@ -45,6 +136,212 @@ class BasicBlock(nn.Module):
         out = self.relu(out)
 
         return out
+
+
+class ResNet2(nn.Module):
+    """Dilated Pre-trained ResNet Model, which preduces the stride of 8 featuremaps at conv5.
+
+    Parameters
+    ----------
+    block : Block
+        Class for the residual block. Options are BasicBlockV1, BottleneckV1.
+    layers : list of int
+        Numbers of layers in each block
+    classes : int, default 1000
+        Number of classification classes.
+    dilated : bool, default False
+        Applying dilation strategy to pretrained ResNet yielding a stride-8 model,
+        typically used in Semantic Segmentation.
+    norm_layer : object
+        Normalization layer used in backbone network (default: :class:`mxnet.gluon.nn.BatchNorm`;
+        for Synchronized Cross-GPU BachNormalization).
+
+    Reference:
+
+        - He, Kaiming, et al. "Deep residual learning for image recognition." Proceedings of the IEEE conference on computer vision and pattern recognition. 2016.
+
+        - Yu, Fisher, and Vladlen Koltun. "Multi-scale context aggregation by dilated convolutions."
+    """
+    # pylint: disable=unused-variable
+    def __init__(self, block, layers, num_classes=1000, dilated=True, norm_layer=nn.BatchNorm2d, multi_grid=False, multi_dilation=None):
+        self.inplanes = 64
+        super(ResNet2, self).__init__()
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3,
+                               bias=False)
+        self.bn1 = norm_layer(64)
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        self.layer1 = self._make_layer(block, 64, layers[0], norm_layer=norm_layer)
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, norm_layer=norm_layer)
+        if dilated:
+            if multi_grid:
+                self.layer3 = self._make_layer(block,256,layers[2],stride=1,
+                                               dilation=2, norm_layer=norm_layer)
+                self.layer4 = self._make_layer(block,512,layers[3],stride=1,
+                                               dilation=4,norm_layer=norm_layer,
+                                               multi_grid=multi_grid, multi_dilation=multi_dilation)
+            else:
+                self.layer3 = self._make_layer(block, 256, layers[2], stride=1,
+                                           dilation=2, norm_layer=norm_layer)
+                self.layer4 = self._make_layer(block, 512, layers[3], stride=1,
+                                           dilation=4, norm_layer=norm_layer)
+        else:
+            self.layer3 = self._make_layer(block, 256, layers[2], stride=2,
+                                           norm_layer=norm_layer)
+            self.layer4 = self._make_layer(block, 512, layers[3], stride=2,
+                                           norm_layer=norm_layer)
+        self.avgpool = nn.AvgPool2d(7)
+        self.fc = nn.Linear(512 * block.expansion, num_classes)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                m.weight.data.normal_(0, math.sqrt(2. / n))
+            elif isinstance(m, norm_layer):
+                m.weight.data.fill_(1)
+                m.bias.data.zero_()
+
+    def _make_layer(self, block, planes, blocks, stride=1, dilation=1, norm_layer=None, multi_grid=False, multi_dilation=None):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplanes, planes * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                norm_layer(planes * block.expansion),
+            )
+
+        layers = []
+        if multi_grid == False:
+            if dilation == 1 or dilation == 2:
+                layers.append(block(self.inplanes, planes, stride, dilation=1,
+                                downsample=downsample, previous_dilation=dilation, norm_layer=norm_layer))
+            elif dilation == 4:
+                layers.append(block(self.inplanes, planes, stride, dilation=2,
+                                downsample=downsample, previous_dilation=dilation, norm_layer=norm_layer))
+            else:
+                raise RuntimeError("=> unknown dilation size: {}".format(dilation))
+        else:
+            layers.append(block(self.inplanes, planes, stride, dilation=multi_dilation[0],
+                                downsample=downsample, previous_dilation=dilation, norm_layer=norm_layer))
+        self.inplanes = planes * block.expansion
+        if multi_grid:
+            div = len(multi_dilation)
+            for i in range(1,blocks):
+                layers.append(block(self.inplanes, planes, dilation=multi_dilation[i%div], previous_dilation=dilation,
+                                                    norm_layer=norm_layer))
+        else:
+            for i in range(1, blocks):
+                layers.append(block(self.inplanes, planes, dilation=dilation, previous_dilation=dilation,
+                                norm_layer=norm_layer))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+
+        return x
+
+
+def resnet101_2(pretrained=False, **kwargs):
+
+    model = ResNet2(Bottleneck2, [3, 4, 23, 3], **kwargs)
+    return model
+
+
+class BaseNet(nn.Module):
+    def __init__(self, nclass, backbone, dilated=True, norm_layer=None, pretrained=True):
+        super(BaseNet, self).__init__()
+        self.nclass = nclass
+        self.pretrained = resnet101_2(pretrained=False, dilated=dilated, norm_layer=norm_layer)
+
+
+    def base_forward(self, x):
+        x = self.pretrained.conv1(x)
+        x = self.pretrained.bn1(x)
+        x = self.pretrained.relu(x)
+        x = self.pretrained.maxpool(x)
+        c1 = self.pretrained.layer1(x)
+        c2 = self.pretrained.layer2(c1)
+        c3 = self.pretrained.layer3(c2)
+        c4 = self.pretrained.layer4(c3)
+
+        return c1, c2, c3, c4
+
+
+class DANet(BaseNet):
+
+    def __init__(self, nclass, backbone, pretrained=True, norm_layer=nn.BatchNorm2d):
+        super(DANet, self).__init__(nclass, backbone, norm_layer=norm_layer, pretrained=pretrained)
+        self.head = DANetHead(2048, 512, norm_layer)
+
+        self.seg1 = nn.Sequential(nn.Dropout(0.1),
+                                  nn.Conv2d(512, nclass, 1))
+
+
+    def forward(self, x):
+        imsize = x.size()[2:]
+        _, _, _, c4 = self.base_forward(x)
+
+        x = self.head(c4)
+
+        output = self.seg1(x)
+        output = F.interpolate(output, imsize, mode='bilinear', align_corners=True)
+
+        return output
+
+
+class DANetHead(nn.Module):
+
+    def __init__(self, in_channels, out_channels, norm_layer):
+        super(DANetHead, self).__init__()
+        inter_channels = in_channels // 4
+        self.conv5a = nn.Sequential(nn.Conv2d(in_channels, inter_channels, 3, padding=1, bias=False),
+                                    norm_layer(inter_channels),
+                                    nn.ReLU(inplace=True))
+
+        self.conv5c = nn.Sequential(nn.Conv2d(in_channels, inter_channels, 3, padding=1, bias=False),
+                                    norm_layer(inter_channels),
+                                    nn.ReLU(inplace=True))
+
+        self.sa = PAM_Module(inter_channels)
+        self.sc = CAM_Module(inter_channels)
+        self.conv51 = nn.Sequential(nn.Conv2d(inter_channels, inter_channels, 3, padding=1, bias=False),
+                                    norm_layer(inter_channels),
+                                    nn.ReLU(inplace=True))
+        self.conv52 = nn.Sequential(nn.Conv2d(inter_channels, inter_channels, 3, padding=1, bias=False),
+                                    norm_layer(inter_channels),
+                                    nn.ReLU(inplace=True))
+
+    def forward(self, x):
+
+        feat1 = self.conv5a(x)
+        sa_feat = self.sa(feat1)
+        sa_conv = self.conv51(sa_feat)
+        feat2 = self.conv5c(x)
+        sc_feat = self.sc(feat2)
+        sc_conv = self.conv52(sc_feat)
+        feat_sum = sa_conv + sc_conv
+
+        return feat_sum
+
+
+# for deeplab below
+def conv3x3(in_planes, out_planes, stride=1, dilation=1):
+    """3x3 convolution with padding"""
+    return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
+                     padding=dilation, dilation=dilation, bias=False)
 
 
 class Bottleneck(nn.Module):
@@ -157,42 +454,6 @@ class ResNet(nn.Module):
         self.load_state_dict(state_dict)
 
 
-def resnet18(pretrained=False, output_stride=None, **kwargs):
-    """Constructs a ResNet-18 model.
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = ResNet(BasicBlock, [2, 2, 2, 2], output_stride, **kwargs)
-    if pretrained:
-        model._load_pretrained_model(torch.load("./resnet34-333f7ec4.pth.pth"))
-    return model
-
-
-def resnet34(pretrained=False, output_stride=None, **kwargs):
-    """Constructs a ResNet-34 model.
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = ResNet(BasicBlock, [3, 4, 6, 3], output_stride, **kwargs)
-    if pretrained:
-        model._load_pretrained_model(torch.load("./resnet34-333f7ec4.pth.pth"))
-    return model
-
-
-def resnet50(pretrained=False, output_stride=None, **kwargs):
-    """Constructs a ResNet-50 model.
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = ResNet(Bottleneck, [3, 4, 6, 3], output_stride, **kwargs)
-    if pretrained:
-        model._load_pretrained_model(torch.load("./resnet50-19c8e357.pth"))
-    return model
-
-
 def resnet101(pretrained=False, output_stride=None, **kwargs):
     """Constructs a ResNet-101 model.
 
@@ -202,18 +463,6 @@ def resnet101(pretrained=False, output_stride=None, **kwargs):
     model = ResNet(Bottleneck, [3, 4, 23, 3], output_stride, **kwargs)
     if pretrained:
         model._load_pretrained_model(torch.load("./resnet101-5d3b4d8f.pth"))
-    return model
-
-
-def resnet152(pretrained=False, output_stride=None, **kwargs):
-    """Constructs a ResNet-152 model.
-
-    Args:
-        pretrained (bool): If True, returns a model pre-trained on ImageNet
-    """
-    model = ResNet(Bottleneck, [3, 8, 36, 3], output_stride, **kwargs)
-    if pretrained:
-        model._load_pretrained_model(torch.load("./resnet152-b121ed2d.pth"))
     return model
 
 
@@ -362,10 +611,21 @@ class ResnetBackend(nn.Module):
 
 
 def init_model():
-    path = os.path.join(os.path.dirname(__file__), 'model.pth')
-    model = DeepLabv3_plus(in_channels=3, num_classes=15, os=16, pretrained=False, norm_layer=nn.BatchNorm2d)
-    model.load_state_dict(torch.load(path, map_location='cpu'))
+    model = []
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-    model = model.to(device)
-    model.eval()
+
+    path1 = os.path.join(os.path.dirname(__file__), 'model_deeplab.pth')
+    model1 = DeepLabv3_plus(in_channels=3, num_classes=15, os=16, pretrained=False, norm_layer=nn.BatchNorm2d)
+    model1.load_state_dict(torch.load(path1, map_location='cpu'))
+    model1 = model1.to(device)
+    model1.eval()
+    model.append(model1)
+
+    path2 = os.path.join(os.path.dirname(__file__), 'model_danet.pth')
+    model2 = DANet(backbone='resnet101', nclass=15, pretrained=False, norm_layer=nn.BatchNorm2d)
+    model2.load_state_dict(torch.load(path2, map_location='cpu'))
+    model2 = model2.to(device)
+    model2.eval()
+    model.append(model2)
+
     return model
