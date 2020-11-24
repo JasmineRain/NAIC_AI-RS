@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 import os
 from util import semantic_to_mask, mask_to_semantic, get_confusion_matrix, get_miou
+from utils_Deeplab import SyncBN2d
 import torch.nn.functional as F
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
@@ -38,15 +39,15 @@ def train_val(config):
     elif config.model_type == "RefineNet":
         model = rf101()
     elif config.model_type == "DANet":
-        src = "./pretrained/DANet.pth"
-        pretrained_dict = torch.load(src, map_location='cpu').module.state_dict()
-        print("load pretrained params from stage 1: " + src)
-        pretrained_dict.pop('seg1.1.weight')
-        pretrained_dict.pop('seg1.1.bias')
-        model = DANet(backbone='resnet101', nclass=config.output_ch, pretrained=True, norm_layer=nn.BatchNorm2d)
-        model_dict = model.state_dict()
-        model_dict.update(pretrained_dict)
-        model.load_state_dict(model_dict)
+        # src = "./pretrained/60_DANet_0.8086.pth"
+        # pretrained_dict = torch.load(src, map_location='cpu').module.state_dict()
+        # print("load pretrained params from stage 1: " + src)
+        # pretrained_dict.pop('seg1.1.weight')
+        # pretrained_dict.pop('seg1.1.bias')
+        model = DANet(backbone='resnext101', nclass=config.output_ch, pretrained=True, norm_layer=nn.BatchNorm2d)
+        # model_dict = model.state_dict()
+        # model_dict.update(pretrained_dict)
+        # model.load_state_dict(model_dict)
     elif config.model_type == "Deeplabv3+":
         # src = "./pretrained/Deeplabv3+.pth"
         # pretrained_dict = torch.load(src, map_location='cpu').module.state_dict()
@@ -55,7 +56,7 @@ def train_val(config):
         # for key in list(pretrained_dict.keys()):
         #     if key.split('.')[0] == "cbr_last":
         #         pretrained_dict.pop(key)
-        model = deeplabv3_plus.DeepLabv3_plus(in_channels=3, num_classes=config.output_ch, backend='resnest101', os=16, pretrained=True, norm_layer=nn.BatchNorm2d)
+        model = deeplabv3_plus.DeepLabv3_plus(in_channels=3, num_classes=config.output_ch, backend='resnet101', os=16, pretrained=True, norm_layer=nn.BatchNorm2d)
         # model_dict = model.state_dict()
         # model_dict.update(pretrained_dict)
         # model.load_state_dict(model_dict)
@@ -67,7 +68,7 @@ def train_val(config):
         model = UNet()
 
     if config.iscontinue:
-        model = torch.load("./exp/90_DANet_0.7565.pth", map_location='cpu').module
+        model = torch.load("./exp/13_Deeplabv3+_0.7619.pth", map_location='cpu').module
 
     for k, m in model.named_modules():
         m._non_persistent_buffers_set = set()  # pytorch 1.6.0 compatability
@@ -145,8 +146,14 @@ def train_val(config):
                 else:
                     mask = mask.to(device, dtype=torch.long).argmax(dim=1)
 
-                pred = model(image)
-                loss = criterion(pred, mask)
+                aux_out, out = model(image)
+                aux_loss = criterion(aux_out, mask)
+                seg_loss = criterion(out, mask)
+                loss = aux_loss + seg_loss
+
+                # pred = model(image)
+                # loss = criterion(pred, mask)
+
                 epoch_loss += loss.item()
 
                 writer.add_scalar('Loss/train', loss.item(), global_step)
@@ -173,7 +180,7 @@ def train_val(config):
                     image = image.to(device, dtype=torch.float32)
                     target = mask.to(device, dtype=torch.long).argmax(dim=1)
                     mask = mask.cpu().numpy()
-                    pred = model(image)
+                    _, pred = model(image)
                     val_loss += F.cross_entropy(pred, target).item()
                     pred = pred.cpu().detach().numpy()
                     mask = semantic_to_mask(mask, labels)
@@ -223,10 +230,10 @@ if __name__ == '__main__':
     parser.add_argument('--img_ch', type=int, default=3)
     parser.add_argument('--output_ch', type=int, default=15)
     parser.add_argument('--num_epochs', type=int, default=1000)
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--lr', type=float, default=1e-2)
-    parser.add_argument('--model_type', type=str, default='Deeplabv3+', help='UNet/UNet++/RefineNet')
+    parser.add_argument('--lr', type=float, default=8e-3)
+    parser.add_argument('--model_type', type=str, default='HRNet_OCR', help='UNet/UNet++/RefineNet')
     parser.add_argument('--data_type', type=str, default='multi', help='single/multi')
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
     parser.add_argument('--optimizer', type=str, default='sgd', help='sgd/adam/adamw')

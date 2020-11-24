@@ -3,8 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Module, Conv2d, Parameter, Softmax
 from models.RendPoint import sampling_points_v2, sampling_features
-
+from resnest.torch import resnest50, resnest101
 import dilated as resnet
+from torchvision import models
 from utils_Deeplab import SyncBN2d
 
 
@@ -82,37 +83,61 @@ class CAM_Module(Module):
 
 
 class BaseNet(nn.Module):
-    def __init__(self, nclass, backbone, dilated=True, norm_layer=None):
+    def __init__(self, nclass, backbone, dilated=True, norm_layer=None, pretrained=True):
         super(BaseNet, self).__init__()
         self.nclass = nclass
         # copying modules from pretrained HRNet+OCR
         if backbone == 'resnet50':
             self.pretrained = resnet.resnet50(pretrained=False, dilated=dilated, norm_layer=norm_layer)
+            if pretrained:
+                self.pretrained.load_state_dict(torch.load("./resnet50-19c8e357.pth"))
         elif backbone == 'resnet101':
             self.pretrained = resnet.resnet101(pretrained=False, dilated=dilated, norm_layer=norm_layer)
+            if pretrained:
+                self.pretrained.load_state_dict(torch.load("./resnet101-5d3b4d8f.pth"))
         elif backbone == 'resnet152':
             self.pretrained = resnet.resnet152(pretrained=False, dilated=dilated, norm_layer=norm_layer)
+            if pretrained:
+                self.pretrained.load_state_dict(torch.load("./resnet152-b121ed2d.pth"))
+        elif backbone == 'resnext50':
+            self.pretrained = models.resnext50_32x4d(pretrained=False, progress=True, replace_stride_with_dilation=[0, 1, 1], norm_layer=norm_layer)
+            if pretrained:
+                self.pretrained.load_state_dict(torch.load("./resnext50_32x4d-7cdf4587.pth"))
+        elif backbone == 'resnext101':
+            self.pretrained = models.resnext101_32x8d(pretrained=False, progress=True, replace_stride_with_dilation=[0, 1, 1], norm_layer=norm_layer)
+            if pretrained:
+                self.pretrained.load_state_dict(torch.load("./resnext101_32x8d-8ba56ff5.pth"))
+        elif backbone == 'resnest50':
+            self.pretrained = resnest50(pretrained=False, dilated=True, norm_layer=norm_layer)
+            if pretrained:
+                self.pretrained.load_state_dict(torch.load("./resnest50-528c19ca.pth"))
+        elif backbone == 'resnest101':
+            self.pretrained = resnest101(pretrained=False, dilated=True, norm_layer=norm_layer)
+            if pretrained:
+                self.pretrained.load_state_dict(torch.load("./resnest101-22405ba7.pth"))
         else:
-            raise RuntimeError('unknown backbone: {}'.format(backbone))
-        self.pretrained.load_state_dict(torch.load("./resnet101-5d3b4d8f.pth"))
+            self.pretrained = models.resnet101(pretrained=False)
 
     def base_forward(self, x):
-
+        # print(x.shape)
         x = self.pretrained.conv1(x)
-
+        # print(x.shape)
         x = self.pretrained.bn1(x)
-
+        # print(x.shape)
         x = self.pretrained.relu(x)
-
+        # print(x.shape)
         x = self.pretrained.maxpool(x)
-        c0 = x
+        # print(x.shape)
         c1 = self.pretrained.layer1(x)
+        # print(c1.shape)
         c2 = self.pretrained.layer2(c1)
+        # print(c2.shape)
         c3 = self.pretrained.layer3(c2)
+        # print(c3.shape)
         c4 = self.pretrained.layer4(c3)
+        # print(c4.shape)
 
-
-        return c0, c1, c2, c3, c4
+        return c1, c2, c3, c4
 
 
 class DANetHead(nn.Module):
@@ -137,26 +162,21 @@ class DANetHead(nn.Module):
                                     norm_layer(inter_channels),
                                     nn.ReLU(inplace=True))
 
-        self.conv8 = nn.Sequential(nn.Dropout2d(0.1, False), nn.Conv2d(512, out_channels, 1))
-
     def forward(self, x):
+
         feat1 = self.conv5a(x)
         sa_feat = self.sa(feat1)
         sa_conv = self.conv51(sa_feat)
-
         feat2 = self.conv5c(x)
         sc_feat = self.sc(feat2)
         sc_conv = self.conv52(sc_feat)
-
         feat_sum = sa_conv + sc_conv
 
-        sasc_output = self.conv8(feat_sum)
-
-        return sasc_output
+        return feat_sum
 
 
 class PointHead(nn.Module):
-    def __init__(self, in_c=520, num_classes=1, k=3, beta=0.75):
+    def __init__(self, in_c=527, num_classes=1, k=3, beta=0.85):
         super(PointHead, self).__init__()
         self.mlp = nn.Sequential(
             nn.Conv1d(in_channels=in_c, out_channels=256, kernel_size=1, stride=1, padding=0, bias=False),
@@ -218,22 +238,23 @@ class PointHead(nn.Module):
 
 class RendDANet(BaseNet):
 
-    def __init__(self, nclass, backbone, norm_layer=SyncBN2d):
+    def __init__(self, nclass, backbone, norm_layer=nn.BatchNorm2d):
         super(RendDANet, self).__init__(nclass, backbone, norm_layer=norm_layer)
-        self.da_head = DANetHead(2048, nclass, norm_layer)
-        self.rend_head = PointHead(in_c=520, num_classes=nclass)
+        self.head = DANetHead(2048, 512, norm_layer=norm_layer)
+        self.seg1 = nn.Sequential(nn.Dropout(0.1), nn.Conv2d(512, nclass, 1))
+        self.rend_head = PointHead(in_c=527, num_classes=nclass)
 
     def forward(self, x):
-        c0, c1, c2, c3, c4 = self.base_forward(x)
+        _, c2, _, c4 = self.base_forward(x)
 
-        mask = self.da_head(c4)
+        mask = self.seg1(self.head(c4))
         result = self.rend_head(x, c2, mask)
 
         return result
 
 
 if __name__ == "__main__":
-    net = RendDANet(backbone='resnet101', nclass=8)
+    net = RendDANet(backbone='resnet101', nclass=15)
     img = torch.rand(4, 3, 384, 384)
     mask = torch.rand(4, 8, 384, 384)
     net.train()

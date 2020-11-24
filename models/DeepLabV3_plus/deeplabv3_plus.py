@@ -38,14 +38,14 @@ class DeepLabv3_plus(nn.Module):
         else:
             raise NotImplementedError
 
-        self.aspp_out_channel = 256
+        self.aspp_out_channel = 128
 
         if hasattr(self.backend, 'interconv_channel'):
             self.aspp_out_channel = self.backend.interconv_channel
 
         self.aspp_pooling = ASPPBlock(self.backend.lastconv_channel, self.aspp_out_channel, os, norm_layer=norm_layer)
 
-        self.cbr_low = nn.Sequential(nn.Conv2d(256, 48,
+        self.cbr_low = nn.Sequential(nn.Conv2d(128, 48,
                                                kernel_size=1, bias=False),
                                      norm_layer(48),
                                      nn.ReLU(inplace=True))

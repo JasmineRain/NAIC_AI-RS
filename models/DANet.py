@@ -144,10 +144,9 @@ class BaseNet(nn.Module):
 
 class DANet(BaseNet):
 
-    def __init__(self, nclass, backbone, pretrained=True, norm_layer=SyncBN2d):
+    def __init__(self, nclass, backbone, pretrained=True, norm_layer=nn.BatchNorm2d):
         super(DANet, self).__init__(nclass, backbone, norm_layer=norm_layer, pretrained=pretrained)
         self.head = DANetHead(2048, 512, norm_layer)
-
         self.seg1 = nn.Sequential(nn.Dropout(0.1),
                                   nn.Conv2d(512, nclass, 1))
 

@@ -4,7 +4,7 @@ import os
 from util import semantic_to_mask, mask_to_semantic, get_confusion_matrix, get_miou
 import torch.nn.functional as F
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 2, 5, 6'
+os.environ['CUDA_VISIBLE_DEVICES'] = '1, 3'
 import torch
 import torch.nn as nn
 from torch.optim import SGD, lr_scheduler, adamw
@@ -36,7 +36,19 @@ def train_val(config):
     elif config.model_type == "SEDANet":
         model = SEDANet()
     elif config.model_type == "RendDANet":
-        model = RendDANet(nclass=8, backbone="resnet101", norm_layer=nn.BatchNorm2d)
+        src = "./exp/24_DANet_0.7585.pth"
+        pretrained_dict = torch.load(src, map_location='cpu').module.state_dict()
+        print("load pretrained params from stage 1: " + src)
+        model = RendDANet(nclass=15, backbone="resnet101", norm_layer=nn.BatchNorm2d)
+        model_dict = model.state_dict()
+        model_dict.update(pretrained_dict)
+        model.load_state_dict(model_dict)
+        for param in model.pretrained.parameters():
+            param.requires_grad = False
+        for param in model.head.parameters():
+            param.requires_grad = False
+        for param in model.seg1.parameters():
+            param.requires_grad = False
     elif config.model_type == "RefineNet":
         model = rf101()
     elif config.model_type == "DANet":
@@ -62,11 +74,14 @@ def train_val(config):
 
     model = model.to(device)
 
-    labels = [100, 200, 300, 400, 500, 600, 700, 800]
-    objects = ['水体', '交通建筑', '建筑', '耕地', '草地', '林地', '裸土', '其他']
+    labels = [1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+    objects = ['水体', '道路', '建筑物', '机场', '停车场', '操场', '普通耕地', '农业大棚', '自然草地', '绿地绿化',
+               '自然林', '人工林', '自然裸土', '人为裸土', '其它']
+    frequency = np.array([0.0279, 0.0797, 0.1241, 0.00001, 0.0616, 0.0029, 0.2298, 0.0107, 0.1207, 0.0249,
+                          0.1470, 0.0777, 0.0617, 0.0118, 0.0187])
 
     if config.optimizer == "sgd":
-        optimizer = SGD(model.parameters(), lr=config.lr, weight_decay=1e-4, momentum=0.9)
+        optimizer = SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=config.lr, weight_decay=1e-4, momentum=0.9)
     elif config.optimizer == "adamw":
         optimizer = adamw.AdamW(model.parameters(), lr=config.lr)
     else:
@@ -83,10 +98,9 @@ def train_val(config):
 
     global_step = 0
     max_fwiou = 0
-    frequency = np.array([0.1051, 0.0607, 0.1842, 0.1715, 0.0869, 0.1572, 0.0512, 0.1832])
     for epoch in range(config.num_epochs):
         epoch_loss = 0.0
-        cm = np.zeros([8, 8])
+        cm = np.zeros([15, 15])
         print(optimizer.param_groups[0]['lr'])
         with tqdm(total=config.num_train, desc="Epoch %d / %d" % (epoch + 1, config.num_epochs),
                   unit='img', ncols=100) as train_pbar:
@@ -173,24 +187,24 @@ if __name__ == '__main__':
 
     # training hyper-parameters
     parser.add_argument('--img_ch', type=int, default=3)
-    parser.add_argument('--output_ch', type=int, default=8)
+    parser.add_argument('--output_ch', type=int, default=15)
     parser.add_argument('--num_epochs', type=int, default=1000)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--lr', type=float, default=2e-3)
+    parser.add_argument('--lr', type=float, default=1e-2)
     parser.add_argument('--model_type', type=str, default='RendDANet', help='UNet/UNet++/RefineNet')
     parser.add_argument('--data_type', type=str, default='multi', help='single/multi')
     parser.add_argument('--loss', type=str, default='ce', help='ce/dice/mix')
     parser.add_argument('--optimizer', type=str, default='sgd', help='sgd/adam/adamw')
-    parser.add_argument('--iscontinue', type=str, default=True, help='true/false')
+    parser.add_argument('--iscontinue', type=str, default=False, help='true/false')
     parser.add_argument('--smooth', type=str, default=False, help='true/false')
 
-    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/train_new/image")
-    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/train_new/mask")
-    parser.add_argument('--val_img_dir', type=str, default="../data/PCL/val_new/image")
-    parser.add_argument('--val_mask_dir', type=str, default="../data/PCL/val_new/mask")
-    parser.add_argument('--num_train', type=int, default=98000, help="4800/1600")
-    parser.add_argument('--num_val', type=int, default=2000, help="1200/400")
+    parser.add_argument('--train_img_dir', type=str, default="../data/PCL/Stage2/train/image")
+    parser.add_argument('--train_mask_dir', type=str, default="../data/PCL/Stage2/train/mask")
+    parser.add_argument('--val_img_dir', type=str, default="../data/PCL/Stage2/val/image")
+    parser.add_argument('--val_mask_dir', type=str, default="../data/PCL/Stage2/val/mask")
+    parser.add_argument('--num_train', type=int, default=99016, help="4800/1600")
+    parser.add_argument('--num_val', type=int, default=1016, help="1200/400")
     parser.add_argument('--model_path', type=str, default='./model')
     parser.add_argument('--result_path', type=str, default='./exp')
 

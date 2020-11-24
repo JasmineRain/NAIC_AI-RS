@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 config = {
   "DATASET": {
-    "NUM_CLASSES": 8
+    "NUM_CLASSES": 15
   },
   "MODEL": {
     "NAME": "seg_hrnet_ocr",
@@ -724,7 +724,8 @@ class HighResolutionNet(nn.Module):
         out_aux_seg.append(out_aux)
         out_aux_seg.append(out)
 
-        return F.interpolate(out, size=imsize, mode="bilinear", align_corners=True)
+        return F.interpolate(out_aux, size=imsize, mode="bilinear", align_corners=ALIGN_CORNERS), \
+               F.interpolate(out, size=imsize, mode="bilinear", align_corners=ALIGN_CORNERS)
 
     def init_weights(self, pretrained='',):
         logger.info('=> init weights from normal distribution')

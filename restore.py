@@ -8,11 +8,11 @@ from models.DeepLabV3_plus import deeplabv3_plus
 @torch.no_grad()
 def restore_models():
 
-    src = "./exp/24_DANet_0.7585.pth"
+    src = "./exp/Deeplabv3+resnest_0.7617.pth"
     model = torch.load(src, map_location="cpu").module
     print(model)
     state_dict = model.state_dict()
-    torch.save(state_dict, "./model_danet.pth")
+    torch.save(state_dict, "./model_deeplab_resnest.pth")
 
 
 if __name__ == "__main__":
