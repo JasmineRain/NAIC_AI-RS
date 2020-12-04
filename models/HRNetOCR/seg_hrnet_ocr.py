@@ -22,7 +22,7 @@ from utils_Deeplab import SyncBN2d
 # from bn_helper import BatchNorm2d, BatchNorm2d_class, relu_inplace
 
 
-BatchNorm2d_class = BatchNorm2d = SyncBN2d
+BatchNorm2d_class = BatchNorm2d = nn.BatchNorm2d
 relu_inplace = True
 
 ALIGN_CORNERS = True

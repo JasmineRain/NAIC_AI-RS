@@ -6,17 +6,21 @@ from PIL import Image, ImageOps
 import os
 import math
 import torchvision.transforms.functional as TF
+import time
+
+# import multiprocessing as mp
+import torch.multiprocessing as mp
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-TARGET_H_DILATE = 256
-TARGET_W_DILATE = 256
+TARGET_H_DILATE = 512
+TARGET_W_DILATE = 512
 TARGET_H = 256
 TARGET_W = 256
 DILATE_SIZE = 128
 DILATE = False
 POST_PROCESS = False
-THRESHOLD = 1536
-BATCH_SIZE = 16
+THRESHOLD = 1280
+BATCH_SIZE = 4
 NUM_WORKERS = 4
 
 
@@ -35,8 +39,7 @@ class RSDataset(Dataset):
 
 def semantic_to_mask(mask, labels):
     x = np.argmax(mask, axis=1)
-    label_codes = np.array(labels)
-    x = np.uint8(label_codes[x.astype(np.uint8)])
+    x = np.uint8(labels[x.astype(np.uint8)])
     return x
 
 
@@ -62,8 +65,8 @@ def crop_with_dilate(img, dilate_size):
     # container: B C H W  ndarray
     for i in range(math.ceil(h / target_h)):
         for j in range(math.ceil(w / target_w)):
-            crop = pad_img[:, i * target_w: (i + 1) * target_w + 2 * dilate_size,
-                   j * target_h: (j + 1) * target_h + 2 * dilate_size]
+            crop = pad_img[:, i * target_h: (i + 1) * target_h + 2 * dilate_size,
+                   j * target_w: (j + 1) * target_w + 2 * dilate_size]
             container.append(crop.numpy())
     return np.array(container), math.ceil(h / target_h), math.ceil(w / target_w)
 
@@ -89,7 +92,7 @@ def crop_without_dilate(img):
     # container: B C H W  ndarray
     for i in range(math.ceil(h / target_h)):
         for j in range(math.ceil(w / target_w)):
-            crop = pad_img[:, i * target_w: (i + 1) * target_w, j * target_h: (j + 1) * target_h]
+            crop = pad_img[:, i * target_h: (i + 1) * target_h, j * target_w: (j + 1) * target_w]
             container.append(crop.numpy())
     return np.array(container), math.ceil(h / target_h), math.ceil(w / target_w)
 
@@ -132,16 +135,36 @@ def concat_with_dilate(h, w, rows, cols, pred, dilate_size):
 
 def predict(models, input_path, output_dir):
     with torch.no_grad():
-
+        global TARGET_H, TARGET_W, TARGET_H_DILATE, TARGET_W_DILATE
         name, ext = os.path.splitext(input_path)
         name = os.path.split(name)[-1] + ".png"
         image = Image.open(input_path)
         w, h = image.size
-        labels = [1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+        labels = np.array([1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17])
 
         threshold = THRESHOLD
-        dilate_size = DILATE_SIZE
-        dilate = DILATE
+        if w <= threshold and h <= threshold:
+            dilate_size = 0
+            dilate = False
+            TARGET_H = h
+            TARGET_W = w
+        else:
+            crop_size = np.array([64 * i for i in range(16, 7, -1)])
+            pad_h = (crop_size - h % crop_size) % crop_size
+            pad_w = (crop_size - w % crop_size) % crop_size
+            left_h = crop_size - pad_h
+            left_w = crop_size - pad_w
+            score_h = list(zip(crop_size, left_h, pad_h))
+            score_w = list(zip(crop_size, left_w, pad_w))
+            score_h_sort = sorted(score_h, key=lambda x: (-x[1], x[2]))
+            score_w_sort = sorted(score_w, key=lambda x: (-x[1], x[2]))
+            best_h = score_h_sort[0][0]
+            best_w = score_w_sort[0][0]
+
+            TARGET_H_DILATE = best_h
+            TARGET_W_DILATE = best_w
+            dilate = True
+            dilate_size = 128
 
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -150,28 +173,28 @@ def predict(models, input_path, output_dir):
         else:
             cropped, rows, cols = crop_without_dilate(image)
 
-        if h < threshold and w < threshold:
+        if h <= threshold and w <= threshold:
             image = torch.from_numpy(cropped).to(device, dtype=torch.float32)
             total_pred = np.zeros((image.shape[0], len(labels), image.shape[-2], image.shape[-1]))
+
             for model in models:
                 pred = model(image)
                 total_pred += pred.cpu().detach().numpy()
-            pred = total_pred
-            # after to_mask pred shape: B H W
-            pred = semantic_to_mask(pred, labels=labels)
+
+            pred = semantic_to_mask(total_pred, labels=labels)
         else:
-            dataset = RSDataset(cropped)
-            dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=NUM_WORKERS)
+            images = torch.from_numpy(cropped).to(device, dtype=torch.float32)
             all_pred = None
-            for images in dataloader:
-                total_pred = np.zeros((image.shape[0], len(labels), image.shape[-2], image.shape[-1]))
-                images = images.to(device, dtype=torch.float32)
+            for image in images:
+                total_pred = np.zeros((1, len(labels), images.shape[-2], images.shape[-1]))
                 for model in models:
-                    pred = model(images)
+                    pred = model(image.unsqueeze(0))
                     total_pred += pred.cpu().detach().numpy()
-                pred = total_pred
-                pred = semantic_to_mask(pred, labels=labels)
+
+                # after to_mask pred shape: B H W
+                pred = semantic_to_mask(total_pred, labels=labels)
                 all_pred = np.concatenate((all_pred, pred), axis=0) if all_pred is not None else pred
+
             pred = all_pred
 
         if dilate:

@@ -5,7 +5,7 @@ from util import semantic_to_mask, mask_to_semantic, get_confusion_matrix, get_m
 from utils_Deeplab import SyncBN2d
 import torch.nn.functional as F
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3'
+os.environ['CUDA_VISIBLE_DEVICES'] = '0, 1, 2, 3, 4, 5, 6, 7'
 import torch
 import torch.nn as nn
 from torch.optim import SGD, lr_scheduler, adamw

@@ -31,8 +31,8 @@ class PostDataset(Dataset):
 
 def visual_img():
     # image_dir = "../data/PCL/results_pre"
-    image_dir = "new_out_no_dilate"
-    output_dir = "new_out_no_dilate_color"
+    image_dir = "out"
+    output_dir = "test_color"
     # image_dir = "K:\dataset\遥感图像\\results"
     # output_dir = "K:\dataset\遥感图像\\results_post"
 
