@@ -4,7 +4,7 @@
 
 此Repo包含了本队伍所有代码文件以及内容概述
 
-### 赛后BB环节
+### 赛后总结
 啰嗦几句，主要是关于本队伍进行的各种尝试，以及实现的各种方案：
 模型包括UNet，UNet++，DANet，BASNet，Deeplabv3+，HRNet_OCR，PSPNet,RefineNet，PointRend等，代码均已开源，同时支持resnet，resnext，Resnest，xception等backbone以及scSE，ASPP等常用特征增强Block；数据增广使用flip和rotate；训练采用SGD和带热重启的余弦学习率调整策略，因资源不足未使用伪标签的40W图片进行训练；其他实现的trick包括Sync BN，Label Smooth，在线边缘Label Smooth，Pseudo Label等；推理环节实现了支持各种参数的膨胀预测，包括可固定中心及膨胀尺寸策略，以及自适应最小边角料策略，另外，本组也实现了测试时增强策略，限于时间有限，复赛未采用；提供可视化脚本，效果如github readme所示；针对模型存储大小，使用Huffman编码对参数进行压缩，复赛环节500M限制内，最多可实现12小时完成4模型集成（HRNet_OCR + DANet + Deeplabv3+ * 2）推理任务（logits平均集成法）。经赛后完整训练，单模型仍有3分（百分制）提升空间，**本方案在卡多的情况下，足以进入决赛**。另外可使用的提速策略包括半精度，删去resnet类backbone中的layer 4（可能略微损失精度，不完全训练下精度相近）。可提升精度的方案包括在backbone中最后两个Layer加入dilated conv。可尝试的损失函数包括lovasz，Focal，BCE，Dice，以及上述损失函数的混合策略，以及单独使用某个loss对模型进行微调。另外提高数据质量的方法，可以根据模型预测的mIoU设定阈值，找出预测效果极差的部分样本，从训练集去除，因为本次比赛数据集质量一般。最重要的提分策略就是充分训练，充分微调，高效集成，因为本队伍未进入决赛，所以为决赛准备的知识蒸馏方法未提供，基本思想就是使用大模型预测的logits，作为小模型训练时的GT，这些logits相比于Hard Label，还包含了类间信息，更有利于模型学习。集成可采用不同backbone的同模型集成，也可以使用不同局部最优点的相同模型集成，效果均十分明显。如有任何问题，欢迎提issue，**更建议邮件/QQ联系**，本人会及时回复，邮箱530781348@qq.com。
 
